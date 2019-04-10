@@ -35,10 +35,10 @@ def mymask(y_true):
     return K.minimum(y_true+1., 1.)
 
 def msse(y_true, y_pred):
-    return K.mean(mymask(y_true) * K.square(K.sqrt(y_pred) - K.sqrt(K.abs(y_true))), axis=-1)
+    return K.mean(mymask(y_true) * K.square(K.sqrt(y_pred) - K.sqrt(y_true)), axis=-1)
 
 def mycost(y_true, y_pred):
-    return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(K.abs(y_true)))) + K.square(K.sqrt(y_pred) - K.sqrt(K.abs(y_true))) + 0.01*K.binary_crossentropy(y_pred, K.abs(y_true))), axis=-1)
+    return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))) + K.square(K.sqrt(y_pred) - K.sqrt(y_true)) + 0.01*K.binary_crossentropy(y_pred, y_true)), axis=-1)
 
 def my_accuracy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * K.equal(y_true, K.round(y_pred)), axis=-1)
@@ -74,14 +74,14 @@ denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_c
 
 model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 
-optimizer = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=False)
+optimizer = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=True)
 
 model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
               optimizer=optimizer, loss_weights=[10, 0.5])
 
 
-batch_size = 256
+batch_size = 32
 
 print('Loading data...')
 with h5py.File('denoise_data9.h5', 'r') as hf:
