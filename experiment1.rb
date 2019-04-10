@@ -70,19 +70,19 @@ class MyCLI < Thor
   def manual
     warn <<EOS
 # get noise data
-curl -L https://people.xiph.org/~jm/demo/rnnoise/rnnoise_contributions.tar.gz | tar zx -C /tmp
+curl -L https://people.xiph.org/~jm/demo/rnnoise/rnnoise_contributions.tar.gz | tar zx -C /mldata1
 
 # get speech data
-curl -L http://www-mmsp.ece.mcgill.ca/Documents/Data/TSP-Speech-Database/48k.zip > /tmp/48k.zip
-unzip -d /tmp /tmp/48k.zip
+curl -L http://www-mmsp.ece.mcgill.ca/Documents/Data/TSP-Speech-Database/48k.zip > /mldata1/48k.zip
+unzip -d /mldata1 /mldata1/48k.zip
 
 # setup
 bundle install
 pipenv install
 
 # prepare training data
-bundle exec ruby experiment1.rb prepare_pcm --input /tmp/48k --output clean.raw
-bundle exec ruby experiment1.rb prepare_pcm --input /tmp/rnnoise_contributions --output noise.raw
+bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/48k --output clean.raw
+bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/rnnoise_contributions --output noise.raw
 bundle exec ruby experiment1.rb prepare_vec --output-count 50000
 
 # train
