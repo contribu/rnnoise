@@ -74,12 +74,14 @@ denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_c
 
 model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 
+adamax = keras.optimizers.Adamax(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4)
+
 model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
-              optimizer='adam', loss_weights=[10, 0.5])
+              optimizer=adamax, loss_weights=[10, 0.5])
 
 
-batch_size = 32
+batch_size = 256
 
 print('Loading data...')
 with h5py.File('denoise_data9.h5', 'r') as hf:
