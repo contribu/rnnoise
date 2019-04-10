@@ -58,10 +58,24 @@ class MyCLI < Thor
     `pipenv run python training/bin2hdf5.py output.f32 -1 87 denoise_data9.h5`
   end
 
-  desc 'train', ''
-  def train
-    warn 'execute following'
-    puts 'pipenv run python training/rnn_train.py'
+  desc 'manual', 'show manual'
+  def manual
+    warn <<EOS
+# to get noise data
+curl -L https://people.xiph.org/~jm/demo/rnnoise/rnnoise_contributions.tar.gz | tar zx -C /tmp
+
+# setup
+bundle install
+pipenv install
+
+# prepare training data
+bundle exec ruby experiment1 prepare_pcm --input /path/to/input --output clean.raw
+bundle exec ruby experiment1 prepare_pcm --input /tmp/rnnoise_contributions --output noise.raw
+bundle exec ruby experiment1 prepare_vec --output-count 50000
+
+# train
+pipenv run python training/rnn_train.py
+EOS
   end
 end
 
