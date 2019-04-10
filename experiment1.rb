@@ -35,6 +35,14 @@ def concat_audio(input_paths, output_path)
   end
 end
 
+def denoise_training_path
+  if File.exists?('bin/Release/denoise_training')
+    'bin/Release/denoise_training'
+  else
+    'bin/denoise_training'
+  end
+end
+
 class MyCLI < Thor
   desc 'prepare_pcm', 'prepare raw pcm from directory'
   option :input, required: true, desc: 'dir path containing clean audio'
@@ -46,14 +54,14 @@ class MyCLI < Thor
   desc 'prepare_vec', 'prepare '
   option :output_count, required: true, desc: 'output frame count'
   def prepare_vec
-    `pipenv run python src/denoise_training --clean clean.raw --noise noise.raw --output /tmp/unused --output_count #{options { :output_count }} > output.f32`
+    `#{denoise_training_path} --clean clean.raw --noise noise.raw --output /tmp/unused --output_count #{options[:output_count]} > output.f32`
     `pipenv run python training/bin2hdf5.py output.f32 -1 87 denoise_data9.h5`
   end
 
   desc 'train', ''
   def train
     warn 'execute following'
-    puts 'pipenv run ~/rnnoise/training/rnn_train.py'
+    puts 'pipenv run python training/rnn_train.py'
   end
 end
 
