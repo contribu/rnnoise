@@ -74,11 +74,11 @@ denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_c
 
 model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 
-adamax = keras.optimizers.Adamax(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4)
+optimizer = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=False)
 
 model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
-              optimizer=adamax, loss_weights=[10, 0.5])
+              optimizer=optimizer, loss_weights=[10, 0.5])
 
 
 batch_size = 256
