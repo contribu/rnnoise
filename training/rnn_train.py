@@ -28,7 +28,7 @@ import numpy as np
 #set_session(tf.Session(config=config))
 
 def my_safecrossentropy(y_pred, y_true):
-    return K.binary_crossentropy(0.1 + 0.9 * y_pred, 0.1 + 0.9 * y_true)
+    return K.binary_crossentropy(0.1 + 0.8 * y_pred, 0.1 + 0.8 * y_true)
 
 def my_crossentropy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * my_safecrossentropy(y_pred, y_true), axis=-1)
