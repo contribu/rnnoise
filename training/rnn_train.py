@@ -27,9 +27,11 @@ import numpy as np
 #config.gpu_options.per_process_gpu_memory_fraction = 0.42
 #set_session(tf.Session(config=config))
 
+def my_safecrossentropy(y_pred, y_true):
+    return K.binary_crossentropy(0.001 + 0.998 * y_pred, 0.001 + 0.998 * y_true)
 
 def my_crossentropy(y_true, y_pred):
-    return K.mean(2*K.abs(y_true-0.5) * K.binary_crossentropy(y_pred, y_true), axis=-1)
+    return K.mean(2*K.abs(y_true-0.5) * my_safecrossentropy(y_pred, y_true), axis=-1)
 
 def mymask(y_true):
     return K.minimum(y_true+1., 1.)
@@ -38,7 +40,7 @@ def msse(y_true, y_pred):
     return K.mean(mymask(y_true) * K.square(K.sqrt(y_pred) - K.sqrt(y_true)), axis=-1)
 
 def mycost(y_true, y_pred):
-    return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))) + K.square(K.sqrt(y_pred) - K.sqrt(y_true)) + 0.01*K.binary_crossentropy(y_pred, y_true)), axis=-1)
+    return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))) + K.square(K.sqrt(y_pred) - K.sqrt(y_true)) + 0.01*my_safecrossentropy(y_pred, y_true)), axis=-1)
 
 def my_accuracy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * K.equal(y_true, K.round(y_pred)), axis=-1)
