@@ -512,6 +512,7 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in) {
 
 #if TRAINING
 
+#include <stdexcept>
 #include "gflags/gflags.h"
 
 DEFINE_string(clean, "", "clean raw pcm path");
