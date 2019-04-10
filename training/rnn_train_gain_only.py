@@ -31,14 +31,14 @@ import numpy as np
 def my_crossentropy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * K.binary_crossentropy(y_pred, y_true), axis=-1)
 
-# def mymask(y_true):
-#     return K.minimum(y_true+1., 1.)
+def mymask(y_true):
+    return K.minimum(y_true+1., 1.)
 
 def msse(y_true, y_pred):
-    return K.mean(K.square(K.sqrt(y_pred) - K.sqrt(y_true)), axis=-1)
+    return K.mean(mymask(y_true) * K.square(K.sqrt(y_pred) - K.sqrt(y_true)), axis=-1)
 
 def mycost(y_true, y_pred):
-    return K.mean(K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))), axis=-1)
+    return K.mean(mymask(y_true) * K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))), axis=-1)
 
 def my_accuracy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * K.equal(y_true, K.round(y_pred)), axis=-1)
