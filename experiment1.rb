@@ -181,6 +181,9 @@ class MyCLI < Thor
 
       # dump (with custom gru activation)
       pipenv run python training/cyf_dump_rnn.py train20190411_202224/weights.012-2.85.hdf5 ./a.c ./a.h LRELU 1.0/5.5
+    
+      # check test data
+      ffmpeg -f s16le -ac 1 -ar 48000 -i clean.raw /tmp/preview.ogg
     EOS
   end
 end
