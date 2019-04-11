@@ -106,16 +106,24 @@ class MyCLI < Thor
   option :input, required: true, desc: 'comma separated raw audio path'
   option :output, required: true, desc: 'output raw pcm path'
   option :interleave_sec, type: :numeric, required: true, desc: 'interleave interval'
+  option :max_sec, type: :numeric, required: false, default: -1, desc: 'output raw pcm max length'
   def interleave_pcm
     block_size = 2 * (48_000 * options[:interleave_sec]).to_i
     inputs = options[:input].split(',')
     offset = 0
+    output_size = 0
+    max_output_size = 2 * (48_000 * options[:max_sec]).to_i
     File.open(options[:output], 'wb') do |output|
       until inputs.empty?
         (0..inputs.length - 1).each do |i|
           data = File.binread(inputs[i], block_size, offset)
           if data && !data.empty?
+            if max_output_size >= 0 && output_size + data.length > max_output_size
+              data = data[0, max_output_size - output_size]
+            end
             output.write(data)
+            output_size += data.length
+            return if max_output_size >= 0 && output_size > max_output_size
           else
             inputs[i] = nil
           end
