@@ -7,9 +7,7 @@ require 'shellwords'
 require 'thor'
 require 'tmpdir'
 
-def ffprobe(path)
-  JSON.parse(`ffprobe -v quiet -print_format json -show_format -show_streams #{path}`)
-end
+
 
 def find_audio_stream(probe_result)
   probe_result['streams'].find { |stream| stream['codec_type'] == 'audio' }
@@ -20,6 +18,10 @@ def exec_command(command)
   raise "failed_command:#{command}\tstatus:#{status}" unless status.success?
 
   stdout
+end
+
+def ffprobe(path)
+  JSON.parse(exec_command("#{Shellwords.join(['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', path])}"))
 end
 
 def concat_audio(input_paths, output_path, max_sec:)
@@ -37,16 +39,15 @@ def concat_audio(input_paths, output_path, max_sec:)
           when /\.(txt|jpg|jpeg|png|json|md)/
             return []
           when /\.zip$/
-            exec_command("unzip -d #{dir}/extracted #{input_path} 2>&1")
+            exec_command("#{Shellwords.join(['unzip', '-d', "#{dir}/extracted", input_path])} 2>&1")
             return Dir.glob("#{dir}/extracted/**/*.*").sort.map { |path| process_file.call(path) }
           when /\.raw$/
             # normalize
-            pcm_path = input_path
-            exec_command("sox -r 48000 -e signed -c 1 -b 16 #{pcm_path} #{raw_path} gain -n 2>&1")
+            exec_command("#{Shellwords.join(['sox', '-r', 48000, '-e', 'signed', '-c', 1, '-b', 16, input_path, raw_path, 'gain', '-n'])} 2>&1")
           else
             # convert to 32bit float wav
             float_path = "#{dir}/float.wav"
-            exec_command("ffmpeg -i #{input_path} -ar 48000 -f wav -acodec pcm_f32le #{float_path} 2>&1")
+            exec_command("#{Shellwords.join(['ffmpeg', '-i', input_path, '-ar', 48000, '-f', 'wav', '-acodec', 'pcm_f32le', float_path])} 2>&1")
 
             # split channel + normalize + remove silence
             probe_result = ffprobe(input_path)
