@@ -84,16 +84,16 @@ reg = 0.000001
 constraint = WeightClip(0.499)
 
 print('Build model...')
-gru_activation = 'tanh'
+gru_lrelu_alpha = 1.0 / 5.5 # from "Empirical Evaluation of Rectified Activations in Convolution Network"
 main_input = Input(shape=(None, 42), name='main_input')
 tmp = Dense(24, activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
-vad_gru = GRU(24, activation=gru_activation, recurrent_activation='sigmoid', return_sequences=True, name='vad_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(tmp)
+vad_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="vad_gru_activation")(GRU(24, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='vad_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(tmp))
 vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(vad_gru)
 noise_input = keras.layers.concatenate([tmp, vad_gru, main_input])
-noise_gru = GRU(48, activation=gru_activation, recurrent_activation='sigmoid', return_sequences=True, name='noise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(noise_input)
+noise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="noise_gru_activation")(GRU(48, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='noise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(noise_input))
 denoise_input = keras.layers.concatenate([vad_gru, noise_gru, main_input])
 
-denoise_gru = GRU(96, activation=gru_activation, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input)
+denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
 
 denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
 

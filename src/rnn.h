@@ -36,6 +36,7 @@
 #define ACTIVATION_TANH    0
 #define ACTIVATION_SIGMOID 1
 #define ACTIVATION_RELU    2
+#define ACTIVATION_LRELU   3
 
 typedef signed char rnn_weight;
 
@@ -54,6 +55,7 @@ typedef struct {
   int nb_inputs;
   int nb_neurons;
   int activation;
+  int activation_arg1;
 } GRULayer;
 
 typedef struct RNNState RNNState;

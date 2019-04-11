@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 
+from keras.utils import plot_model
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
@@ -14,6 +15,12 @@ from keras import backend as K
 import sys
 import re
 import numpy as np
+
+def gru_activation():
+    return sys.argv[4]
+
+def gru_activation_arg1():
+    return sys.argv[5]
 
 def printVector(f, vector, name):
     v = np.reshape(vector, (-1));
@@ -47,8 +54,8 @@ def printLayer(f, hf, layer):
         hf.write('#define {}_SIZE {}\n'.format(name.upper(), int(weights[0].shape[1]/3)))
         hf.write('extern const GRULayer {};\n\n'.format(name));
     else:
-        f.write('const DenseLayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}, {}, ACTIVATION_{}\n}};\n\n'
-                .format(name, name, name, weights[0].shape[0], weights[0].shape[1], activation))
+        f.write('const DenseLayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}, {}, ACTIVATION_{}, {}\n}};\n\n'
+                .format(name, name, name, weights[0].shape[0], weights[0].shape[1], gru_activation(), gru_activation_arg1()))
         hf.write('#define {}_SIZE {}\n'.format(name.upper(), weights[0].shape[1]))
         hf.write('extern const DenseLayer {};\n\n'.format(name));
     return;
@@ -84,6 +91,8 @@ class WeightClip(Constraint):
 
 model = load_model(sys.argv[1], custom_objects={'msse': msse, 'mean_squared_sqrt_error': mean_squared_sqrt_error, 'my_crossentropy': my_crossentropy, 'mycost': mycost, 'WeightClip': WeightClip})
 
+plot_model(model, to_file="./model.png")
+
 weights = model.get_weights()
 
 f = open(sys.argv[2], 'w')
@@ -104,7 +113,7 @@ for i, layer in enumerate(model.layers):
 
 hf.write('struct RNNState {\n')
 for i, name in enumerate(layer_list):
-    hf.write('  float {}_state[{}_SIZE];\n'.format(name, name.upper())) 
+    hf.write('  float {}_state[{}_SIZE];\n'.format(name, name.upper()))
 hf.write('};\n')
 
 hf.write('\n\n#endif\n')
