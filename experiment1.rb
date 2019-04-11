@@ -73,7 +73,7 @@ def concat_audio(input_paths, output_path, max_sec:)
       input_data = Parallel.map(slice, in_threads: 16) do |input_path|
         process_file.call(input_path)
       end
-      input_data.flatten.each do |data|
+      input_data.flatten.compact.each do |data|
         if max_sec >= 0 && data.length > 2 * (max_samples - output_samples)
           data = data[0, 2 * (max_samples - output_samples)]
         end
@@ -170,7 +170,11 @@ class MyCLI < Thor
       # train
       pipenv run python training/rnn_train.py
 
-      # use gpu in docker container
+      # blend multiple training data
+      bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/48k --output 48k.raw --max_sec 3600
+      bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/another --output another.raw --max_sec 3600
+      bundle exec ruby experiment1.rb interleave_pcm --input 48k.raw,another.raw --output clean.raw --interleave_sec 30 --shuffle --max_sec 3600
+      bundle exec ruby experiment1.rb prepare_vec --output-count 50000
 
     EOS
   end
