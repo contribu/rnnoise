@@ -15,6 +15,7 @@ from keras.models import Model
 from keras.layers import Input
 from keras.layers import Dense
 from keras.layers import LSTM
+from keras.layers import BatchNormalization
 from keras.layers import CuDNNGRU
 from keras.layers import GRU
 from keras.layers import SimpleRNN
@@ -39,6 +40,7 @@ parser = argparse.ArgumentParser(description='train script')
 parser.add_argument('--data', default='denoise_data9.h5')
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--reg', type=float, default=0.000001)
+parser.add_argument('--dropout', type=float, default=0.0)
 parser.add_argument('--cudnngru', action='store_true')
 args = parser.parse_args()
 
@@ -94,28 +96,38 @@ constraint = WeightClip(0.499)
 
 def create_gru(units, name):
     if args.cudnngru:
-        return CuDNNGRU(units, return_sequences=True, name=name, kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)
+        result = CuDNNGRU(units, return_sequences=True, name=name, kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)
     else:
         # return GRU(units, activation='tanh', recurrent_activation='sigmoid', return_sequences=True, name=name, kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)
-        return GRU(units, recurrent_activation='sigmoid', reset_after=True, return_sequences=True, name=name, kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)
+        result = GRU(units, recurrent_activation='sigmoid', reset_after=True, return_sequences=True, name=name, kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)
+    return result
 
 print('Build model...')
+print(args)
 
 # gru_lrelu_alpha = 1.0 / 5.5 # from "Empirical Evaluation of Rectified Activations in Convolution Network"
 
 main_input = Input(shape=(None, 42), name='main_input')
 tmp = Dense(24, activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
+if args.dropout > 0:
+    tmp = Dropout(args.dropout)(tmp)
 
 vad_gru = create_gru(24, 'vad_gru')(tmp)
+if args.dropout > 0:
+    vad_gru = Dropout(args.dropout)(vad_gru)
 # vad_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="vad_gru_activation")(GRU(24, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='vad_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(tmp))
 vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(vad_gru)
 
 noise_input = keras.layers.concatenate([tmp, vad_gru, main_input])
 noise_gru = create_gru(48, 'noise_gru')(noise_input)
+if args.dropout > 0:
+    noise_gru = Dropout(args.dropout)(noise_gru)
 # noise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="noise_gru_activation")(GRU(48, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='noise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(noise_input))
 
 denoise_input = keras.layers.concatenate([vad_gru, noise_gru, main_input])
 denoise_gru = create_gru(96, 'denoise_gru')(noise_input)
+if args.dropout > 0:
+    noise_gru = Dropout(args.dropout)(noise_gru)
 # denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
 
 denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
