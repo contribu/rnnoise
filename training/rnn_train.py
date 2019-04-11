@@ -6,6 +6,9 @@ import argparse
 import datetime
 import math
 import os
+import sys
+import importlib
+import random
 
 from sklearn.model_selection import train_test_split
 
@@ -30,6 +33,9 @@ from keras.constraints import Constraint
 from keras import backend as K
 import numpy as np
 
+# import mixup_generator from .py
+# mixup_generator = importlib.machinery.SourceFileLoader('mixup_generator', os.path.join(os.path.dirname(__file__), '../deps/mixup-generator/mixup_generator.py')).load_module()
+
 #import tensorflow as tf
 #from keras.backend.tensorflow_backend import set_session
 #config = tf.ConfigProto()
@@ -42,6 +48,8 @@ parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--reg', type=float, default=0.000001)
 parser.add_argument('--dropout', type=float, default=0.0)
 parser.add_argument('--cudnngru', action='store_true')
+parser.add_argument('--mixup', type=int, default=0)
+parser.add_argument('--mixup_alpha', type=float, default=0.2)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -74,6 +82,32 @@ class WeightClip(Constraint):
     def get_config(self):
         return {'name': self.__class__.__name__,
             'c': self.c}
+
+class MyMixupGenerator:
+    def __init__(self, x_train, y_train, vad_train, batch_size, alpha):
+        self.x_train = x_train
+        self.y_train = y_train
+        self.vad_train = vad_train
+        self.batch_size = batch_size
+        self.alpha = alpha
+
+    def __call__(self):
+        while True:
+            idx1 = random.randrange(0, len(self.x_train) // self.batch_size)
+            idx2 = random.randrange(0, len(self.x_train) // self.batch_size)
+            batch_x1 = self.x_train[idx1 * self.batch_size:(idx1 + 1) * self.batch_size]
+            batch_y1 = self.y_train[idx1 * self.batch_size:(idx1 + 1) * self.batch_size]
+            batch_vad1 = self.vad_train[idx1 * self.batch_size:(idx1 + 1) * self.batch_size]
+
+            batch_x2 = self.x_train[idx2 * self.batch_size:(idx2 + 1) * self.batch_size]
+            batch_y2 = self.y_train[idx2 * self.batch_size:(idx2 + 1) * self.batch_size]
+            batch_vad2 = self.vad_train[idx2 * self.batch_size:(idx2 + 1) * self.batch_size]
+
+            lam = np.random.beta(self.alpha, self.alpha)
+            yield batch_x1 * (1 - lam) + batch_x2 * lam, [batch_y1 * (1 - lam) + batch_y2 * lam, batch_vad1 * (1 - lam) + batch_vad2 * lam]
+
+    def __len__(self):
+        return math.ceil(len(self.x_train) / self.batch_size)
 
 class MySequence(keras.utils.Sequence):
     def __init__(self, x_train, y_train, vad_train, batch_size):
@@ -179,24 +213,29 @@ modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, '
                                                   save_weights_only=False,
                                                   mode='min',
                                                   period=1)
-model.fit(x_train, [y_train, vad_train],
-          batch_size=batch_size,
-          epochs=120,
-          validation_split=0.1,
-          callbacks=[modelCheckpoint])
 
-# x_train_train, x_val, y_train_train, y_val, vad_train_train, vad_val = train_test_split(x_train, y_train, vad_train, test_size=0.1, shuffle=True, random_state=1)
-#
-# train_gen = MySequence(x_train_train, y_train_train, vad_train_train, batch_size)
-# val_gen = MySequence(x_val, y_val, vad_val, batch_size)
-# model.fit_generator(
-#     generator=train_gen,
-#     epochs=120,
-#     steps_per_epoch=len(train_gen),
-#     verbose=1,
-#     validation_data=val_gen,
-#     validation_steps=len(val_gen),
-#     callbacks=[modelCheckpoint])
+if args.mixup == 0:
+    model.fit(x_train, [y_train, vad_train],
+              batch_size=batch_size,
+              epochs=120,
+              validation_split=0.1,
+              callbacks=[modelCheckpoint])
+else:
+    x_train_train, x_val, y_train_train, y_val, vad_train_train, vad_val = train_test_split(x_train, y_train, vad_train, test_size=0.1, shuffle=True, random_state=1)
+
+    # train_gen = MySequence(x_train_train, y_train_train, vad_train_train, batch_size)
+    train_gen = MyMixupGenerator(x_train_train, y_train_train, vad_train_train, batch_size, args.mixup_alpha)
+    # train_gen = mixup_generator.MixupGenerator(x_train_train, np.array([y_train_train, vad_val]), batch_size=batch_size, alpha=0.2)()
+    val_gen = MySequence(x_val, y_val, vad_val, batch_size)
+    model.fit_generator(
+        generator=train_gen(),
+        epochs=120,
+        steps_per_epoch=args.mixup * len(train_gen),
+        use_multiprocessing=True,
+        verbose=1,
+        validation_data=val_gen,
+        validation_steps=len(val_gen),
+        callbacks=[modelCheckpoint])
 
 model.save("newweights9i.hdf5")
 
