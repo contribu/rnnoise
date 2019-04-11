@@ -126,6 +126,7 @@ class MyCLI < Thor
           idx = input_indicies[i].shift
           if idx.nil?
             inputs[i] = nil
+            input_indicies[i] = nil
             next
           end
 
@@ -138,6 +139,7 @@ class MyCLI < Thor
           return if max_output_size >= 0 && output_size > max_output_size
         end
         inputs = inputs.compact
+        input_indicies = input_indicies.compact
       end
     end
   end
