@@ -22,7 +22,10 @@ def exec_command(command)
   stdout
 end
 
-def concat_audio(input_paths, output_path)
+def concat_audio(input_paths, output_path, max_sec:)
+  output_samples = 0
+  max_samples = (48_000 * max_sec).to_i
+
   File.open(output_path, 'wb') do |output|
     input_paths.each_slice(32).each do |slice|
       process_file = lambda do |input_path|
@@ -71,7 +74,12 @@ def concat_audio(input_paths, output_path)
         process_file.call(input_path)
       end
       input_data.flatten.each do |data|
+        if max_sec >= 0 && data.length > 2 * (max_samples - output_samples)
+          data = data[0, 2 * (max_samples - output_samples)]
+        end
         output.write(data)
+        output_samples += data.length / 2
+        return if max_sec >= 0 && output_samples >= max_samples
       end
     end
   end
@@ -89,9 +97,36 @@ class MyCLI < Thor
   desc 'prepare_pcm', 'prepare raw pcm from directory'
   option :input, required: true, desc: 'dir path containing clean audio'
   option :output, required: true, desc: 'output raw pcm path'
+  option :max_sec, type: :numeric, required: false, default: -1, desc: 'output raw pcm max length'
   def prepare_pcm
-    concat_audio(Dir.glob("#{options[:input]}/**/*.*").sort, options[:output])
+    concat_audio(Dir.glob("#{options[:input]}/**/*.*").sort, options[:output], max_sec: options[:max_sec])
   end
+
+  desc 'interleave_pcm', 'blend multiple raw pcm'
+  option :input, required: true, desc: 'comma separated raw audio path'
+  option :output, required: true, desc: 'output raw pcm path'
+  option :interleave_sec, type: :numeric, required: true, desc: 'interleave interval'
+  def interleave_pcm
+    block_size = 2 * (48_000 * options[:interleave_sec]).to_i
+    inputs = options[:input].split(',')
+    offset = 0
+    File.open(options[:output], 'wb') do |output|
+      until inputs.empty?
+        (0..inputs.length - 1).each do |i|
+          data = File.binread(inputs[i], block_size, offset)
+          if data && !data.empty?
+            output.write(data)
+          else
+            inputs[i] = nil
+          end
+        end
+        offset += block_size
+        inputs = inputs.compact
+      end
+    end
+  end
+
+  option :interleave_sec, required: false, default: -1, desc: 'input interleave interval'
 
   desc 'prepare_vec', 'prepare '
   option :output_count, required: true, desc: 'output frame count'
