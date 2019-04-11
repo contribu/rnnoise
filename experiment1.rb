@@ -31,6 +31,8 @@ def concat_audio(input_paths, output_path, max_sec:)
   File.open(output_path, 'wb') do |output|
     input_paths.each_slice(32).each do |slice|
       process_file = lambda do |input_path|
+        return [] if File.directory?(input_path)
+
         Dir.mktmpdir do |dir|
           warn input_path
           raw_path = "#{dir}/output.raw"
@@ -40,7 +42,7 @@ def concat_audio(input_paths, output_path, max_sec:)
             return []
           when /\.zip$/
             exec_command("#{Shellwords.join(['unzip', '-d', "#{dir}/extracted", input_path])} 2>&1")
-            return Dir.glob("#{dir}/extracted/**/*.*").sort.map { |path| process_file.call(path) }
+            return Dir.glob("#{dir}/extracted/**/*").sort.map { |path| process_file.call(path) }
           when /\.raw$/
             # normalize
             exec_command("#{Shellwords.join(['sox', '-r', 48000, '-e', 'signed', '-c', 1, '-b', 16, input_path, raw_path, 'gain', '-n'])} 2>&1")
@@ -100,7 +102,7 @@ class MyCLI < Thor
   option :output, required: true, desc: 'output raw pcm path'
   option :max_sec, type: :numeric, required: false, default: -1, desc: 'output raw pcm max length'
   def prepare_pcm
-    concat_audio(Dir.glob("#{options[:input]}/**/*.*").sort, options[:output], max_sec: options[:max_sec])
+    concat_audio(Dir.glob("#{options[:input]}/**/*").sort, options[:output], max_sec: options[:max_sec])
   end
 
   desc 'interleave_pcm', 'blend multiple raw pcm'
