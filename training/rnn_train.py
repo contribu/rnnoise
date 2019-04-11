@@ -232,7 +232,7 @@ else:
         epochs=120,
         steps_per_epoch=args.mixup * len(train_gen),
         use_multiprocessing=True,
-        workers=8,
+        workers=4,
         verbose=1,
         validation_data=val_gen,
         validation_steps=len(val_gen),
