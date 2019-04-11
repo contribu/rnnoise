@@ -38,6 +38,7 @@ import numpy as np
 parser = argparse.ArgumentParser(description='train script')
 parser.add_argument('--data', default='denoise_data9.h5')
 parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--reg', type=float, default=0.000001)
 parser.add_argument('--cudnngru', action='store_true')
 args = parser.parse_args()
 
@@ -88,7 +89,7 @@ class MySequence(keras.utils.Sequence):
     def __len__(self):
         return math.ceil(len(self.x_train) / self.batch_size)
 
-reg = 0.000001
+reg = args.reg
 constraint = WeightClip(0.499)
 
 def create_gru(units, name):
