@@ -2,6 +2,9 @@
 
 from __future__ import print_function
 
+import datetime
+import os
+
 import keras
 from keras.models import Sequential
 from keras.models import Model
@@ -28,7 +31,7 @@ import numpy as np
 #set_session(tf.Session(config=config))
 
 def my_safecrossentropy(y_pred, y_true):
-    return K.binary_crossentropy(0.001 + 0.998 * y_pred, 0.001 + 0.998 * y_true)
+    return K.binary_crossentropy(0.1 + 0.8 * y_pred, 0.1 + 0.8 * y_true)
 
 def my_crossentropy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * my_safecrossentropy(y_pred, y_true), axis=-1)
@@ -62,7 +65,7 @@ reg = 0.000001
 constraint = WeightClip(0.499)
 
 print('Build model...')
-gru_activation = keras.layers.LeakyReLU(alpha=0.18)
+gru_activation = 'tanh'
 main_input = Input(shape=(None, 42), name='main_input')
 tmp = Dense(24, activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
 vad_gru = GRU(24, activation=gru_activation, recurrent_activation='sigmoid', return_sequences=True, name='vad_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(tmp)
@@ -82,7 +85,6 @@ optimizer = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=No
 model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
               optimizer=optimizer, loss_weights=[10, 0.5])
-
 
 batch_size = 32
 
@@ -114,8 +116,20 @@ all_data = 0;
 print(len(x_train), 'train sequences. x shape =', x_train.shape, 'y shape = ', y_train.shape)
 
 print('Train...')
+dir = datetime.datetime.now().strftime("train%Y%m%d_%H%M%S")
+os.makedirs(os.path.join(dir), exist_ok=True)
+modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, 'weights.{epoch:03d}-{val_loss:.2f}.hdf5'),
+                                                  monitor='val_loss',
+                                                  verbose=1,
+                                                  save_best_only=True,
+                                                  save_weights_only=False,
+                                                  mode='min',
+                                                  period=1)
 model.fit(x_train, [y_train, vad_train],
           batch_size=batch_size,
           epochs=120,
-          validation_split=0.1)
+          validation_split=0.1,
+          callbacks=[modelCheckpoint])
 model.save("newweights9i.hdf5")
+
+
