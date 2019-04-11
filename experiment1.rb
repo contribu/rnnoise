@@ -179,6 +179,8 @@ class MyCLI < Thor
       bundle exec ruby experiment1.rb interleave_pcm --input 48k.raw,another.raw --output clean.raw --interleave_sec 30 --shuffle --max_sec 3600
       bundle exec ruby experiment1.rb prepare_vec --output-count 50000
 
+      # dump (with custom gru activation)
+      pipenv run python training/cyf_dump_rnn.py train20190411_202224/weights.012-2.85.hdf5 ./a.c ./a.h LRELU 1.0/5.5
     EOS
   end
 end
