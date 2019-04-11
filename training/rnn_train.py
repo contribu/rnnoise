@@ -3,7 +3,10 @@
 from __future__ import print_function
 
 import datetime
+import math
 import os
+
+from sklearn.model_selection import train_test_split
 
 import keras
 from keras.models import Sequential
@@ -60,6 +63,22 @@ class WeightClip(Constraint):
     def get_config(self):
         return {'name': self.__class__.__name__,
             'c': self.c}
+
+class MySequence(keras.utils.Sequence):
+    def __init__(self, x_train, y_train, vad_train, batch_size):
+        self.x_train = x_train
+        self.y_train = y_train
+        self.vad_train = vad_train
+        self.batch_size = batch_size
+
+    def __getitem__(self, idx):
+        batch_x = self.x_train[idx * self.batch_size:(idx + 1) * self.batch_size]
+        batch_y = self.y_train[idx * self.batch_size:(idx + 1) * self.batch_size]
+        batch_vad = self.vad_train[idx * self.batch_size:(idx + 1) * self.batch_size]
+        return batch_x, [batch_y, batch_vad]
+
+    def __len__(self):
+        return math.ceil(len(self.x_train) / self.batch_size)
 
 reg = 0.000001
 constraint = WeightClip(0.499)
@@ -125,11 +144,25 @@ modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, '
                                                   save_weights_only=False,
                                                   mode='min',
                                                   period=1)
-model.fit(x_train, [y_train, vad_train],
-          batch_size=batch_size,
-          epochs=120,
-          validation_split=0.1,
-          callbacks=[modelCheckpoint])
+# model.fit(x_train, [y_train, vad_train],
+#           batch_size=batch_size,
+#           epochs=120,
+#           validation_split=0.1,
+#           callbacks=[modelCheckpoint])
+
+x_train_train, x_val, y_train_train, y_val, vad_train_train, vad_val = train_test_split(x_train, y_train, vad_train, test_size=0.1, shuffle=True, random_state=1)
+
+train_gen = MySequence(x_train_train, y_train_train, vad_train_train, batch_size)
+val_gen = MySequence(x_val, y_val, vad_val, batch_size)
+model.fit_generator(
+    generator=train_gen,
+    epochs=120,
+    steps_per_epoch=len(train_gen),
+    verbose=1,
+    validation_data=val_gen,
+    validation_steps=len(val_gen),
+    callbacks=[modelCheckpoint])
+
 model.save("newweights9i.hdf5")
 
 
