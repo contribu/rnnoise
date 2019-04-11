@@ -36,6 +36,7 @@ import numpy as np
 #set_session(tf.Session(config=config))
 
 parser = argparse.ArgumentParser(description='train script')
+parser.add_argument('--data', default='denoise_data9.h5')
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--cudnngru', action='store_true')
 args = parser.parse_args()
@@ -129,7 +130,7 @@ model.compile(loss=[mycost, my_crossentropy],
 batch_size = args.batch_size
 
 print('Loading data...')
-with h5py.File('denoise_data9.h5', 'r') as hf:
+with h5py.File(args.data, 'r') as hf:
     all_data = hf['data'][:]
 print('done.')
 
