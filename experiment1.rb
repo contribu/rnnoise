@@ -136,7 +136,7 @@ class MyCLI < Thor
           end
           output.write(data)
           output_size += data.length
-          return if max_output_size >= 0 && output_size > max_output_size
+          return if max_output_size >= 0 && output_size >= max_output_size
         end
         inputs = inputs.compact
         input_indicies = input_indicies.compact
