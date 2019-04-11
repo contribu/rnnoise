@@ -147,10 +147,15 @@ class MyCLI < Thor
   option :interleave_sec, required: false, default: -1, desc: 'input interleave interval'
 
   desc 'prepare_vec', 'prepare '
+  option :clean, required: true, desc: 'clean raw audio path'
+  option :noise, required: true, desc: 'noise raw audio path'
+  option :output, required: true, desc: 'noisy raw audio path'
   option :output_count, required: true, desc: 'output frame count'
   def prepare_vec
-    `#{denoise_training_path} --clean clean.raw --noise noise.raw --output /tmp/unused --output_count #{options[:output_count]} > output.f32`
-    `pipenv run python training/bin2hdf5.py output.f32 -1 87 denoise_data9.h5`
+    Dir.mktmpdir do |dir|
+      `#{denoise_training_path} --clean #{options[:clean]} --noise #{options[:noise]} --output /tmp/unused --output_count #{options[:output_count]} > #{dir}/output.f32`
+      `pipenv run python training/bin2hdf5.py #{dir}/output.f32 -1 87 #{options[:output]}`
+    end
   end
 
   desc 'manual', 'show manual'
