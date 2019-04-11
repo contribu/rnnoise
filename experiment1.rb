@@ -36,7 +36,7 @@ def concat_audio(input_paths, output_path, max_sec:)
           raw_path = "#{dir}/output.raw"
 
           case input_path
-          when /\.(txt|jpg|jpeg|png|json|md|ini|reapeaks)/
+          when /\.(txt|jpg|jpeg|png|json|md|ini|reapeaks|pdf)/
             return []
           when /\.zip$/
             exec_command("#{Shellwords.join(['unzip', '-d', "#{dir}/extracted", input_path])} 2>&1")
