@@ -107,28 +107,33 @@ class MyCLI < Thor
   option :output, required: true, desc: 'output raw pcm path'
   option :interleave_sec, type: :numeric, required: true, desc: 'interleave interval'
   option :max_sec, type: :numeric, required: false, default: -1, desc: 'output raw pcm max length'
+  option :shuffle, type: :boolean, required: false, default: false, desc: 'shuffle input'
   def interleave_pcm
     block_size = 2 * (48_000 * options[:interleave_sec]).to_i
     inputs = options[:input].split(',')
-    offset = 0
     output_size = 0
     max_output_size = 2 * (48_000 * options[:max_sec]).to_i
+    input_indicies = (0..inputs.length - 1).map do |i|
+      indicies = (0..(File.size(inputs[i]) + block_size - 1) / block_size - 1).to_a
+      options[:shuffle] ? indicies.shuffle : indicies
+    end
     File.open(options[:output], 'wb') do |output|
       until inputs.empty?
         (0..inputs.length - 1).each do |i|
-          data = File.binread(inputs[i], block_size, offset)
-          if data && !data.empty?
-            if max_output_size >= 0 && output_size + data.length > max_output_size
-              data = data[0, max_output_size - output_size]
-            end
-            output.write(data)
-            output_size += data.length
-            return if max_output_size >= 0 && output_size > max_output_size
-          else
+          idx = input_indicies[i].shift
+          if idx.nil?
             inputs[i] = nil
+            next
           end
+
+          data = File.binread(inputs[i], block_size, idx * block_size)
+          if max_output_size >= 0 && output_size + data.length > max_output_size
+            data = data[0, max_output_size - output_size]
+          end
+          output.write(data)
+          output_size += data.length
+          return if max_output_size >= 0 && output_size > max_output_size
         end
-        offset += block_size
         inputs = inputs.compact
       end
     end
