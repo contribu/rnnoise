@@ -154,7 +154,7 @@ class MyCLI < Thor
   def prepare_vec
     Dir.mktmpdir do |dir|
       `#{denoise_training_path} --clean #{options[:clean]} --noise #{options[:noise]} --output /tmp/unused --output_count #{options[:output_count]} > #{dir}/output.f32`
-      `pipenv run python training/bin2hdf5.py #{dir}/output.f32 -1 87 #{options[:output]}`
+      `pipenv run python training/bin2hdf5.py #{dir}/output.f32 #{options[:output_count]} 87 #{options[:output]}`
     end
   end
 
