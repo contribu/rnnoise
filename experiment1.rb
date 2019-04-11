@@ -1,50 +1,82 @@
 # frozen_string_literal: true
 
+require 'json'
+require 'open3'
 require 'parallel'
+require 'shellwords'
 require 'thor'
 require 'tmpdir'
+
+def ffprobe(path)
+  JSON.parse(`ffprobe -v quiet -print_format json -show_format -show_streams #{path}`)
+end
+
+def find_audio_stream(probe_result)
+  probe_result['streams'].find { |stream| stream['codec_type'] == 'audio' }
+end
+
+def exec_command(command)
+  stdout, status = Open3.capture2(command)
+  raise "failed_command:#{command}\tstatus:#{status}" unless status.success?
+
+  stdout
+end
 
 def concat_audio(input_paths, output_path)
   File.open(output_path, 'wb') do |output|
     input_paths.each_slice(32).each do |slice|
-      input_data = Parallel.map(slice, in_threads: 16) do |input_path|
+      process_file = lambda do |input_path|
         Dir.mktmpdir do |dir|
           warn input_path
+          raw_path = "#{dir}/output.raw"
 
           case input_path
-          when /\.(txt|jpg|jpeg|png|json)/
-            next nil
+          when /\.(txt|jpg|jpeg|png|json|md)/
+            return []
+          when /\.zip$/
+            exec_command("unzip -d #{dir}/extracted #{input_path} 2>&1")
+            return Dir.glob("#{dir}/extracted/**/*.*").sort.map { |path| process_file.call(path) }
           when /\.raw$/
+            # normalize
             pcm_path = input_path
+            exec_command("sox -r 48000 -e signed -c 1 -b 16 #{pcm_path} #{raw_path} gain -n 2>&1")
           else
-            pcm_path = "#{dir}/output.raw"
-            ffmpeg_output = `ffmpeg -i #{input_path} -ac 1 -ar 48000 -f s16le -acodec pcm_s16le #{pcm_path} 2>&1`
-            unless File.exist?(pcm_path) && File.size(pcm_path).positive?
-              warn "failed #{input_path} #{ffmpeg_output}"
-              next nil
+            # convert to 32bit float wav
+            float_path = "#{dir}/float.wav"
+            exec_command("ffmpeg -i #{input_path} -ar 48000 -f wav -acodec pcm_f32le #{float_path} 2>&1")
+
+            # split channel + normalize
+            probe_result = ffprobe(input_path)
+            channels = find_audio_stream(probe_result)['channels']
+            (1..channels).each do |channel_idx|
+              exec_command("sox #{float_path} #{dir}/splitted#{channel_idx}.wav remix #{channel_idx} gain -n 2>&1")
             end
+
+            # concat + convert to raw
+            inputs = (1..channels).map do |channel_idx|
+              "#{dir}/splitted#{channel_idx}.wav"
+            end
+            exec_command("sox #{inputs.join(' ')} -e signed -b 16 #{raw_path} 2>&1")
           end
 
-          normalized_path = "#{dir}/normalized.raw"
-          sox_output = `sox -r 48000 -e signed -c 1 -b 16 #{pcm_path} #{normalized_path} gain -n 2>&1`
-
-          if File.exist?(normalized_path) && File.size(normalized_path).positive?
-            File.read(normalized_path)
-          else
-            warn "failed #{input_path} #{sox_output}"
-            next nil
-          end
+          File.read(raw_path)
         end
+      rescue StandardError => e
+        warn "failed #{input_path} because #{e}"
       end
-      input_data.each do |data|
-        output.write(data) if data
+
+      input_data = Parallel.map(slice, in_threads: 16) do |input_path|
+        process_file.call(input_path)
+      end
+      input_data.flatten.each do |data|
+        output.write(data)
       end
     end
   end
 end
 
 def denoise_training_path
-  if File.exists?('bin/Release/denoise_training')
+  if File.exist?('bin/Release/denoise_training')
     'bin/Release/denoise_training'
   else
     'bin/denoise_training'
@@ -68,29 +100,29 @@ class MyCLI < Thor
 
   desc 'manual', 'show manual'
   def manual
-    warn <<EOS
-# get noise data
-curl -L https://people.xiph.org/~jm/demo/rnnoise/rnnoise_contributions.tar.gz | tar zx -C /mldata1
+    warn <<~EOS
+      # get noise data
+      curl -L https://people.xiph.org/~jm/demo/rnnoise/rnnoise_contributions.tar.gz | tar zx -C /mldata1
 
-# get speech data
-curl -L http://www-mmsp.ece.mcgill.ca/Documents/Data/TSP-Speech-Database/48k.zip > /mldata1/48k.zip
-unzip -d /mldata1 /mldata1/48k.zip
+      # get speech data
+      curl -L http://www-mmsp.ece.mcgill.ca/Documents/Data/TSP-Speech-Database/48k.zip > /mldata1/48k.zip
+      unzip -d /mldata1 /mldata1/48k.zip
 
-# setup
-bundle install
-pipenv install
+      # setup
+      bundle install
+      pipenv install
 
-# prepare training data
-bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/48k --output clean.raw
-bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/rnnoise_contributions --output noise.raw
-bundle exec ruby experiment1.rb prepare_vec --output-count 50000
+      # prepare training data
+      bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/48k --output clean.raw
+      bundle exec ruby experiment1.rb prepare_pcm --input /mldata1/rnnoise_contributions --output noise.raw
+      bundle exec ruby experiment1.rb prepare_vec --output-count 50000
 
-# train
-pipenv run python training/rnn_train.py
+      # train
+      pipenv run python training/rnn_train.py
 
-# use gpu in docker container
+      # use gpu in docker container
 
-EOS
+    EOS
   end
 end
 
