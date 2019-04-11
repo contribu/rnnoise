@@ -45,11 +45,13 @@ def concat_audio(input_paths, output_path)
             float_path = "#{dir}/float.wav"
             exec_command("ffmpeg -i #{input_path} -ar 48000 -f wav -acodec pcm_f32le #{float_path} 2>&1")
 
-            # split channel + normalize
+            # split channel + normalize + remove silence
             probe_result = ffprobe(input_path)
             channels = find_audio_stream(probe_result)['channels']
             (1..channels).each do |channel_idx|
-              exec_command("sox #{float_path} #{dir}/splitted#{channel_idx}.wav remix #{channel_idx} gain -n 2>&1")
+              exec_command("sox #{float_path} #{dir}/soxtmp1.wav remix #{channel_idx} 2>&1")
+              exec_command("sox #{dir}/soxtmp1.wav #{dir}/soxtmp2.wav silence 1 1.0 0.1% 1 1.0 0.1% : restart 2>&1")
+              exec_command("sox #{dir}/soxtmp2.wav #{dir}/splitted#{channel_idx}.wav gain -n 2>&1")
             end
 
             # concat + convert to raw
