@@ -333,7 +333,7 @@ static int compute_frame_features(DenoiseState *st, kiss_fft_cpx *X, kiss_fft_cp
   float pitch_buf[PITCH_BUF_SIZE>>1];
   int pitch_index;
   float gain;
-  float *(pre[1]);
+  float *pre[1];
   float tmp[NB_BANDS];
   float follow, logMax;
   frame_analysis(st, X, Ex, in);
