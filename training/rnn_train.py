@@ -47,9 +47,11 @@ parser.add_argument('--data', default='denoise_data9.h5')
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--reg', type=float, default=0.000001)
 parser.add_argument('--dropout', type=float, default=0.0)
+parser.add_argument('--hidden_units', type=float, default=1.0)
 parser.add_argument('--cudnngru', action='store_true')
 parser.add_argument('--mixup', type=int, default=0)
 parser.add_argument('--mixup_alpha', type=float, default=0.2)
+parser.add_argument('--learning_rate', type=float, default=1e-3)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -142,24 +144,24 @@ print(args)
 # gru_lrelu_alpha = 1.0 / 5.5 # from "Empirical Evaluation of Rectified Activations in Convolution Network"
 
 main_input = Input(shape=(None, 42), name='main_input')
-tmp = Dense(24, activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
+tmp = Dense(math.ceil(24 * args.hidden_units), activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
 if args.dropout > 0:
     tmp = Dropout(args.dropout)(tmp)
 
-vad_gru = create_gru(24, 'vad_gru')(tmp)
+vad_gru = create_gru(math.ceil(24 * args.hidden_units), 'vad_gru')(tmp)
 if args.dropout > 0:
     vad_gru = Dropout(args.dropout)(vad_gru)
 # vad_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="vad_gru_activation")(GRU(24, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='vad_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(tmp))
 vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(vad_gru)
 
 noise_input = keras.layers.concatenate([tmp, vad_gru, main_input])
-noise_gru = create_gru(48, 'noise_gru')(noise_input)
+noise_gru = create_gru(math.ceil(48 * args.hidden_units), 'noise_gru')(noise_input)
 if args.dropout > 0:
     noise_gru = Dropout(args.dropout)(noise_gru)
 # noise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="noise_gru_activation")(GRU(48, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='noise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(noise_input))
 
 denoise_input = keras.layers.concatenate([vad_gru, noise_gru, main_input])
-denoise_gru = create_gru(96, 'denoise_gru')(noise_input)
+denoise_gru = create_gru(math.ceil(96 * args.hidden_units), 'denoise_gru')(noise_input)
 if args.dropout > 0:
     noise_gru = Dropout(args.dropout)(noise_gru)
 # denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
@@ -168,7 +170,7 @@ denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_c
 
 model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 
-optimizer = keras.optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=True)
+optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=True)
 
 model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
