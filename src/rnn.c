@@ -111,8 +111,72 @@ void compute_dense(const DenseLayer *layer, float *output, const float *input)
    }
 }
 
+// reset_after = true, recurrent_activation = sigmoid
+// https://github.com/keras-team/keras/blob/master/keras/layers/recurrent.py#L1268
+// https://www.tensorflow.org/api_docs/python/tf/contrib/cudnn_rnn/CudnnCompatibleGRUCell?hl=NO
+static void compute_cudnngru(const GRULayer *gru, float *state, const float *input)
+{
+    int i, j;
+    int N, M;
+    int stride;
+    float z[MAX_NEURONS];
+    float r[MAX_NEURONS];
+    float h[MAX_NEURONS];
+    M = gru->nb_inputs;
+    N = gru->nb_neurons;
+    stride = 3*N;
+    
+    const rnn_weight *input_bias_z = gru->bias;
+    const rnn_weight *input_bias_r = gru->bias + N;
+    const rnn_weight *input_bias_h = gru->bias + 2 * N;
+    const rnn_weight *recurrent_bias_z = gru->bias + 3 * N;
+    const rnn_weight *recurrent_bias_r = gru->bias + 4 * N;
+    const rnn_weight *recurrent_bias_h = gru->bias + 5 * N;
+    
+    for (i=0;i<N;i++)
+    {
+        /* Compute update gate. */
+        float sum = input_bias_z[i] + recurrent_bias_z[i];
+        for (j=0;j<M;j++)
+            sum += gru->input_weights[j*stride + i]*input[j];
+        for (j=0;j<N;j++)
+            sum += gru->recurrent_weights[j*stride + i]*state[j];
+        z[i] = sigmoid_approx(WEIGHTS_SCALE*sum);
+    }
+    for (i=0;i<N;i++)
+    {
+        /* Compute reset gate. */
+        float sum = input_bias_r[i] + recurrent_bias_r[i];
+        for (j=0;j<M;j++)
+            sum += gru->input_weights[N + j*stride + i]*input[j];
+        for (j=0;j<N;j++)
+            sum += gru->recurrent_weights[N + j*stride + i]*state[j];
+        r[i] = sigmoid_approx(WEIGHTS_SCALE*sum);
+    }
+    for (i=0;i<N;i++)
+    {
+        /* Compute output. */
+        float x_h = input_bias_h[i];
+        for (j=0;j<M;j++)
+            x_h += gru->input_weights[2*N + j*stride + i]*input[j];
+        float recurrent_h = recurrent_bias_h[i];
+        for (j=0;j<N;j++)
+            recurrent_h += gru->recurrent_weights[2*N + j*stride + i]*state[j];
+        recurrent_h *= r[i];
+        float sum = tansig_approx(WEIGHTS_SCALE*(x_h + recurrent_h));
+        h[i] = z[i]*state[i] + (1-z[i])*sum;
+    }
+    for (i=0;i<N;i++)
+        state[i] = h[i];
+}
+
 void compute_gru(const GRULayer *gru, float *state, const float *input)
 {
+    if (gru->cudnngru) {
+        compute_cudnngru(gru, state, input);
+        return;
+    }
+    
    int i, j;
    int N, M;
    int stride;
@@ -153,7 +217,6 @@ void compute_gru(const GRULayer *gru, float *state, const float *input)
       if (gru->activation == ACTIVATION_SIGMOID) sum = sigmoid_approx(WEIGHTS_SCALE*sum);
       else if (gru->activation == ACTIVATION_TANH) sum = tansig_approx(WEIGHTS_SCALE*sum);
       else if (gru->activation == ACTIVATION_RELU) sum = relu(WEIGHTS_SCALE*sum);
-      else if (gru->activation == ACTIVATION_LRELU) sum = lrelu(WEIGHTS_SCALE*sum, gru->activation_arg1);
       else *(int*)0=0;
       h[i] = z[i]*state[i] + (1-z[i])*sum;
    }

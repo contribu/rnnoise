@@ -178,9 +178,9 @@ if args.dropout > 0:
 # noise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="noise_gru_activation")(GRU(48, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='noise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(noise_input))
 
 denoise_input = keras.layers.concatenate([vad_gru, noise_gru, main_input])
-denoise_gru = create_gru(math.ceil(96 * args.hidden_units), 'denoise_gru')(noise_input)
+denoise_gru = create_gru(math.ceil(96 * args.hidden_units), 'denoise_gru')(denoise_input)
 if args.dropout > 0:
-    noise_gru = Dropout(args.dropout)(noise_gru)
+    denoise_gru = Dropout(args.dropout)(denoise_gru)
 # denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
 
 denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)

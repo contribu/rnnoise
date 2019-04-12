@@ -31,14 +31,18 @@
 
 #define WEIGHTS_SCALE (1.f/256)
 
-#define MAX_NEURONS 128
+#define MAX_NEURONS 1024
 
 #define ACTIVATION_TANH    0
 #define ACTIVATION_SIGMOID 1
 #define ACTIVATION_RELU    2
 #define ACTIVATION_LRELU   3
 
+#ifdef RNNOISE_FLOAT_WEIGHT
+typedef float rnn_weight;
+#else
 typedef signed char rnn_weight;
+#endif
 
 typedef struct {
   const rnn_weight *bias;
@@ -55,7 +59,7 @@ typedef struct {
   int nb_inputs;
   int nb_neurons;
   int activation;
-  int activation_arg1;
+  int cudnngru;
 } GRULayer;
 
 typedef struct RNNState RNNState;
