@@ -49,6 +49,7 @@ parser.add_argument('--reg', type=float, default=0.000001)
 parser.add_argument('--dropout', type=float, default=0.0)
 parser.add_argument('--hidden_units', type=float, default=1.0)
 parser.add_argument('--cudnngru', action='store_true')
+parser.add_argument('--mmap', action='store_true')
 parser.add_argument('--mixup', type=int, default=0)
 parser.add_argument('--mixup_alpha', type=float, default=0.2)
 parser.add_argument('--learning_rate', type=float, default=1e-3)
@@ -127,6 +128,22 @@ class MySequence(keras.utils.Sequence):
     def __len__(self):
         return math.ceil(len(self.x_train) / self.batch_size)
 
+class MyLazySequence(keras.utils.Sequence):
+    def __init__(self, x_train, y_train, vad_train, batch_size):
+        self.x_train = x_train
+        self.y_train = y_train
+        self.vad_train = vad_train
+        self.batch_size = batch_size
+
+    def __getitem__(self, idx):
+        batch_x = self.x_train[idx * self.batch_size:(idx + 1) * self.batch_size]
+        batch_y = self.y_train[idx * self.batch_size:(idx + 1) * self.batch_size]
+        batch_vad = self.vad_train[idx * self.batch_size:(idx + 1) * self.batch_size]
+        return batch_x, [batch_y, batch_vad]
+
+    def __len__(self):
+        return math.ceil(len(self.x_train) / self.batch_size)
+
 reg = args.reg
 constraint = WeightClip(0.499)
 
@@ -177,32 +194,32 @@ model.compile(loss=[mycost, my_crossentropy],
               optimizer=optimizer, loss_weights=[10, 0.5])
 
 batch_size = args.batch_size
-
-print('Loading data...')
-with h5py.File(args.data, 'r') as hf:
-    all_data = hf['data'][:]
-print('done.')
-
 window_size = 2000
+
+if args.mmap:
+    print('Mmap .f32 file')
+    all_data = np.memmap(args.data, dtype='float32', mode='r', shape=(os.path.getsize(args.data) // (4 * 87), 87));
+else:
+    print('Loading data from .h5...')
+    with h5py.File(args.data, 'r') as hf:
+        all_data = hf['data'][:]
+    print('done.')
 
 nb_sequences = len(all_data)//window_size
 print(nb_sequences, ' sequences')
 x_train = all_data[:nb_sequences*window_size, :42]
 x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
 
-y_train = np.copy(all_data[:nb_sequences*window_size, 42:64])
+y_train = all_data[:nb_sequences*window_size, 42:64]
 y_train = np.reshape(y_train, (nb_sequences, window_size, 22))
 
-noise_train = np.copy(all_data[:nb_sequences*window_size, 64:86])
+noise_train = all_data[:nb_sequences*window_size, 64:86]
 noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
 
-vad_train = np.copy(all_data[:nb_sequences*window_size, 86:87])
+vad_train = all_data[:nb_sequences*window_size, 86:87]
 vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))
 
-all_data = 0;
-#x_train = x_train.astype('float32')
-#y_train = y_train.astype('float32')
-
+all_data = 0
 print(len(x_train), 'train sequences. x shape =', x_train.shape, 'y shape = ', y_train.shape)
 
 print('Train...')

@@ -161,11 +161,16 @@ class MyCLI < Thor
   def manual
     warn <<~EOS
       # get noise data
-      curl -L https://people.xiph.org/~jm/demo/rnnoise/rnnoise_contributions.tar.gz | tar zx -C /mldata1
+      curl -L https://people.xiph.org/~jm/demo/rnnoise/rnnoise_contributions.tar.gz | tar zx -C /mldata1/speech
 
-      # get speech data
+      # get speech data from http://www-mmsp.ece.mcgill.ca/Documents/Data/
       curl -L http://www-mmsp.ece.mcgill.ca/Documents/Data/TSP-Speech-Database/48k.zip > /mldata1/48k.zip
       unzip -d /mldata1 /mldata1/48k.zip
+
+      # get speech data from https://nats.gitlab.io/swc/
+      curl -L https://www2.informatik.uni-hamburg.de/nats/pub/SWC/SWC_Dutch.tar | tar x -C /mldata1/speech
+      curl -L https://www2.informatik.uni-hamburg.de/nats/pub/SWC/SWC_English.tar | tar x -C /mldata1/speech
+      curl -L https://www2.informatik.uni-hamburg.de/nats/pub/SWC/SWC_German.tar | tar x -C /mldata1/speech
 
       # setup
       bundle install
