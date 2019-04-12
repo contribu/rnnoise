@@ -29,7 +29,7 @@ def concat_audio(input_paths, output_path, max_sec:)
   max_samples = (48_000 * max_sec).to_i
 
   File.open(output_path, 'wb') do |output|
-    input_paths.each_slice(32).each do |slice|
+    input_paths.each_slice(4).each do |slice|
       process_file = lambda do |input_path|
         return [] if File.directory?(input_path)
 
@@ -73,7 +73,7 @@ def concat_audio(input_paths, output_path, max_sec:)
         warn "failed #{input_path} because #{e}"
       end
 
-      input_data = Parallel.map(slice, in_threads: 16) do |input_path|
+      input_data = Parallel.map(slice, in_threads: 4) do |input_path|
         process_file.call(input_path)
       end
       input_data.flatten.compact.each do |data|
