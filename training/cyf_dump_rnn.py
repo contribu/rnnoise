@@ -47,7 +47,10 @@ def printLayer(f, hf, layer):
         printVector(f, weights[1], layer.name + '_recurrent_weights')
     printVector(f, weights[-1], layer.name + '_bias')
     name = layer.name
-    activation = re.search('function (.*) at', str(layer.activation)).group(1).upper()
+    if hasattr(layer, 'activation'):
+        activation = re.search('function (.*) at', str(layer.activation)).group(1).upper()
+    else:
+        activation = 'TANH'
     if len(weights) > 2:
         f.write('const GRULayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}_recurrent_weights,\n   {}, {}, ACTIVATION_{}\n}};\n\n'
                 .format(name, name, name, name, weights[0].shape[0], int(weights[0].shape[1]/3), activation))
@@ -94,6 +97,12 @@ model = load_model(sys.argv[1], custom_objects={'msse': msse, 'mean_squared_sqrt
 plot_model(model, to_file="./model.png")
 
 weights = model.get_weights()
+
+# convert
+
+
+
+# end covert
 
 f = open(sys.argv[2], 'w')
 hf = open(sys.argv[3], 'w')
