@@ -201,8 +201,10 @@ if args.mmap:
     all_data = np.memmap(args.data, dtype='float32', mode='r', shape=(os.path.getsize(args.data) // (4 * 87), 87));
 else:
     print('Loading data from .h5...')
-    with h5py.File(args.data, 'r') as hf:
-        all_data = hf['data'][:]
+    all_data = np.fromfile(args.data, dtype='float32');
+    all_data = np.reshape(all_data, (-1, 87));
+    # with h5py.File(args.data, 'r') as hf:
+    #     all_data = hf['data'][:]
     print('done.')
 
 nb_sequences = len(all_data)//window_size
