@@ -19,10 +19,10 @@ TEST(Rnn, MatchKerasResult) {
         compute_rnn(&rnn, actual_gain, actual_vad, input);
         
         for (int j = 0; j < 22; j++) {
-            EXPECT_NEAR(actual_gain[j], expected_gain[j], eps);
+            EXPECT_NEAR(expected_gain[j], actual_gain[j], eps);
         }
         for (int j = 0; j < 1; j++) {
-            EXPECT_NEAR(actual_vad[j], expected_vad[j], eps);
+            EXPECT_NEAR(expected_vad[j], actual_vad[j], eps);
         }
     }
 }

@@ -83,6 +83,9 @@ typedef struct {
   kiss_fft_state *kfft;
   float half_window[FRAME_SIZE];
   float dct_table[NB_BANDS*NB_BANDS];
+#ifdef RNNOISE_IPP
+    void *ipp_dft_work;
+#endif
 } CommonState;
 
 struct DenoiseState {
@@ -191,6 +194,65 @@ void interp_band_gain(float *g, const float *bandE) {
   }
 }
 #endif
+    
+#ifdef RNNOISE_IPP
+}
+
+#include <cstring>
+#include <assert.h>
+#include "ipp.h"
+
+struct MyIppR2CDft32 {
+    typedef float Float;
+    typedef int Size;
+    
+    MyIppR2CDft32(int len): spec_(nullptr), work_buffer_size_(0) {
+        int spec_size = 0;
+        int init_buffer_size = 0;
+        CheckResult(ippsDFTGetSize_R_32f(len, IPP_FFT_NODIV_BY_ANY, ippAlgHintNone, &spec_size, &init_buffer_size, &work_buffer_size_));
+        
+        spec_ = spec_size ? (IppsDFTSpec_R_32f *)ippsMalloc_8u(spec_size) : nullptr;
+        
+        Ipp8u *init_buffer = init_buffer_size ? ippsMalloc_8u(init_buffer_size) : nullptr;
+        if (init_buffer) std::memset(init_buffer, 0, init_buffer_size);
+        
+        CheckResult(ippsDFTInit_R_32f(len, IPP_FFT_NODIV_BY_ANY, ippAlgHintNone, spec_, init_buffer));
+        
+        if (init_buffer) ippsFree(init_buffer);
+    }
+    ~MyIppR2CDft32() {
+        if (!spec_) {
+            ippsFree(spec_);
+        }
+    }
+    void Execute(const Float *src, Float *dest, void *work) const {
+        CheckResult(ippsDFTFwd_RToCCS_32f(src, dest, spec_, work_buffer_size_ ? (Ipp8u *)work : nullptr));
+    }
+    void ExecuteInv(const Float *src, Float *dest, void *work) const {
+        CheckResult(ippsDFTInv_CCSToR_32f(src, dest, spec_, work_buffer_size_ ? (Ipp8u *)work : nullptr));
+    }
+    
+    static const MyIppR2CDft32 &GetDefaultSizeInstance() {
+        static MyIppR2CDft32 dft(WINDOW_SIZE);
+        return dft;
+    }
+    
+    int work_buffer_size() const { return work_buffer_size_; }
+private:
+    void CheckResult(IppStatus result) const {
+        assert(result == ippStsNoErr);
+    }
+    IppsDFTSpec_R_32f *spec_;
+    int work_buffer_size_;
+};
+
+static void init_ipp(CommonState *common) {
+    const auto &dft = MyIppR2CDft32::GetDefaultSizeInstance();
+    common->ipp_dft_work = ippsMalloc_8u(dft.work_buffer_size());
+}
+
+extern "C" {
+#endif
 
 static void check_init(CommonState *common) {
   int i;
@@ -205,6 +267,9 @@ static void check_init(CommonState *common) {
       if (j==0) common->dct_table[i*NB_BANDS + j] *= sqrt(.5);
     }
   }
+#ifdef RNNOISE_IPP
+    init_ipp(common);
+#endif
   common->init = 1;
 }
 
@@ -236,7 +301,30 @@ static void idct(float *out, const float *in) {
 }
 #endif
 
-static void forward_transform(CommonState *common, kiss_fft_cpx *out, const float *in) {
+#ifdef RNNOISE_IPP
+}
+
+void forward_transform_ipp(CommonState *common, kiss_fft_cpx *out, const float *in) {
+    const auto &dft = MyIppR2CDft32::GetDefaultSizeInstance();
+    
+    check_init(common);
+    static_assert(sizeof(kiss_fft_cpx) == 8, "kiss_fft_cpx must be packed");
+    dft.Execute(in, (float *)out, common->ipp_dft_work);
+    ippsMulC_32f_I(1.0 / WINDOW_SIZE, (float *)out, WINDOW_SIZE + 2);
+}
+
+void inverse_transform_ipp(CommonState *common, float *out, const kiss_fft_cpx *in) {
+    const auto &dft = MyIppR2CDft32::GetDefaultSizeInstance();
+    
+    check_init(common);
+    static_assert(sizeof(kiss_fft_cpx) == 8, "kiss_fft_cpx must be packed");
+    dft.ExecuteInv((float *)in, out, common->ipp_dft_work);
+}
+
+extern "C" {
+#endif
+    
+void forward_transform_reference(CommonState *common, kiss_fft_cpx *out, const float *in) {
   int i;
   kiss_fft_cpx x[WINDOW_SIZE];
   kiss_fft_cpx y[WINDOW_SIZE];
@@ -251,7 +339,7 @@ static void forward_transform(CommonState *common, kiss_fft_cpx *out, const floa
   }
 }
 
-static void inverse_transform(CommonState *common, float *out, const kiss_fft_cpx *in) {
+void inverse_transform_reference(CommonState *common, float *out, const kiss_fft_cpx *in) {
   int i;
   kiss_fft_cpx x[WINDOW_SIZE];
   kiss_fft_cpx y[WINDOW_SIZE];
@@ -270,6 +358,23 @@ static void inverse_transform(CommonState *common, float *out, const kiss_fft_cp
     out[i] = WINDOW_SIZE*y[WINDOW_SIZE - i].r;
   }
 }
+    
+    
+    static void forward_transform(CommonState *common, kiss_fft_cpx *out, const float *in) {
+#ifdef RNNOISE_IPP
+        forward_transform_ipp(common, out, in);
+#else
+        forward_transform_reference(common, out, in);
+#endif
+    }
+    
+    static void inverse_transform(CommonState *common, float *out, const kiss_fft_cpx *in) {
+#ifdef RNNOISE_IPP
+        inverse_transform_ipp(common, out, in);
+#else
+        inverse_transform_reference(common, out, in);
+#endif
+    }
 
 static void apply_window(CommonState *common, float *x) {
   int i;
@@ -297,6 +402,11 @@ DenoiseState *rnnoise_create() {
 }
 
 void rnnoise_destroy(DenoiseState *st) {
+#ifdef RNNOISE_IPP
+    if (st->common.init) {
+        ippsFree(st->common.ipp_dft_work);
+    }
+#endif
   free(st);
 }
 
