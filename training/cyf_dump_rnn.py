@@ -8,6 +8,7 @@ from keras.layers import Dense
 from keras.layers import LSTM
 from keras.layers import GRU
 from keras.models import load_model
+from keras.engine.saving import preprocess_weights_for_loading
 
 from keras.constraints import Constraint
 from keras import backend as K
@@ -48,9 +49,10 @@ def printLayer(f, hf, layer):
     else:
         activation = 'TANH'
     if len(weights) > 2:
+        converted = preprocess_weights_for_loading(layer, weights)
         f.write('const GRULayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}_recurrent_weights,\n   {}, {}, ACTIVATION_{}, 1\n}};\n\n'
-                .format(name, name, name, name, weights[0].shape[0], int(weights[0].shape[1]/3), activation))
-        hf.write('#define {}_SIZE {}\n'.format(name.upper(), int(weights[0].shape[1]/3)))
+                .format(name, name, name, name, converted[0].shape[0], int(converted[0].shape[1]/3), activation))
+        hf.write('#define {}_SIZE {}\n'.format(name.upper(), int(converted[0].shape[1]/3)))
         hf.write('extern const GRULayer {};\n\n'.format(name));
     else:
         f.write('const DenseLayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}, {}, ACTIVATION_{}\n}};\n\n'
