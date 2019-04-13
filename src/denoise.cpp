@@ -97,6 +97,7 @@ struct DenoiseState {
   float mem_hp_x[2];
   float lastg[NB_BANDS];
   RNNState rnn;
+  CommonState common;
 };
 
 #if SMOOTH_BANDS
@@ -191,33 +192,30 @@ void interp_band_gain(float *g, const float *bandE) {
 }
 #endif
 
-
-CommonState common;
-
-static void check_init() {
+static void check_init(CommonState *common) {
   int i;
-  if (common.init) return;
-  common.kfft = opus_fft_alloc_twiddles(2*FRAME_SIZE, NULL, NULL, NULL, 0);
+  if (common->init) return;
+  common->kfft = opus_fft_alloc_twiddles(2*FRAME_SIZE, NULL, NULL, NULL, 0);
   for (i=0;i<FRAME_SIZE;i++)
-    common.half_window[i] = sin(.5*M_PI*sin(.5*M_PI*(i+.5)/FRAME_SIZE) * sin(.5*M_PI*(i+.5)/FRAME_SIZE));
+    common->half_window[i] = sin(.5*M_PI*sin(.5*M_PI*(i+.5)/FRAME_SIZE) * sin(.5*M_PI*(i+.5)/FRAME_SIZE));
   for (i=0;i<NB_BANDS;i++) {
     int j;
     for (j=0;j<NB_BANDS;j++) {
-      common.dct_table[i*NB_BANDS + j] = cos((i+.5)*j*M_PI/NB_BANDS);
-      if (j==0) common.dct_table[i*NB_BANDS + j] *= sqrt(.5);
+      common->dct_table[i*NB_BANDS + j] = cos((i+.5)*j*M_PI/NB_BANDS);
+      if (j==0) common->dct_table[i*NB_BANDS + j] *= sqrt(.5);
     }
   }
-  common.init = 1;
+  common->init = 1;
 }
 
-static void dct(float *out, const float *in) {
+static void dct(CommonState *common, float *out, const float *in) {
   int i;
-  check_init();
+  check_init(common);
   for (i=0;i<NB_BANDS;i++) {
     int j;
     float sum = 0;
     for (j=0;j<NB_BANDS;j++) {
-      sum += in[j] * common.dct_table[j*NB_BANDS + i];
+      sum += in[j] * common->dct_table[j*NB_BANDS + i];
     }
     out[i] = sum*sqrt(2./22);
   }
@@ -238,26 +236,26 @@ static void idct(float *out, const float *in) {
 }
 #endif
 
-static void forward_transform(kiss_fft_cpx *out, const float *in) {
+static void forward_transform(CommonState *common, kiss_fft_cpx *out, const float *in) {
   int i;
   kiss_fft_cpx x[WINDOW_SIZE];
   kiss_fft_cpx y[WINDOW_SIZE];
-  check_init();
+  check_init(common);
   for (i=0;i<WINDOW_SIZE;i++) {
     x[i].r = in[i];
     x[i].i = 0;
   }
-  opus_fft(common.kfft, x, y, 0);
+  opus_fft(common->kfft, x, y, 0);
   for (i=0;i<FREQ_SIZE;i++) {
     out[i] = y[i];
   }
 }
 
-static void inverse_transform(float *out, const kiss_fft_cpx *in) {
+static void inverse_transform(CommonState *common, float *out, const kiss_fft_cpx *in) {
   int i;
   kiss_fft_cpx x[WINDOW_SIZE];
   kiss_fft_cpx y[WINDOW_SIZE];
-  check_init();
+  check_init(common);
   for (i=0;i<FREQ_SIZE;i++) {
     x[i] = in[i];
   }
@@ -265,7 +263,7 @@ static void inverse_transform(float *out, const kiss_fft_cpx *in) {
     x[i].r = x[WINDOW_SIZE - i].r;
     x[i].i = -x[WINDOW_SIZE - i].i;
   }
-  opus_fft(common.kfft, x, y, 0);
+  opus_fft(common->kfft, x, y, 0);
   /* output in reverse order for IFFT. */
   out[0] = WINDOW_SIZE*y[0].r;
   for (i=1;i<WINDOW_SIZE;i++) {
@@ -273,12 +271,12 @@ static void inverse_transform(float *out, const kiss_fft_cpx *in) {
   }
 }
 
-static void apply_window(float *x) {
+static void apply_window(CommonState *common, float *x) {
   int i;
-  check_init();
+  check_init(common);
   for (i=0;i<FRAME_SIZE;i++) {
-    x[i] *= common.half_window[i];
-    x[WINDOW_SIZE - 1 - i] *= common.half_window[i];
+    x[i] *= common->half_window[i];
+    x[WINDOW_SIZE - 1 - i] *= common->half_window[i];
   }
 }
 
@@ -313,8 +311,8 @@ static void frame_analysis(DenoiseState *st, kiss_fft_cpx *X, float *Ex, const f
   RNN_COPY(x, st->analysis_mem, FRAME_SIZE);
   for (i=0;i<FRAME_SIZE;i++) x[FRAME_SIZE + i] = in[i];
   RNN_COPY(st->analysis_mem, in, FRAME_SIZE);
-  apply_window(x);
-  forward_transform(X, x);
+  apply_window(&st->common, x);
+  forward_transform(&st->common, X, x);
 #if TRAINING
   for (i=lowpass;i<FREQ_SIZE;i++)
     X[i].r = X[i].i = 0;
@@ -351,12 +349,12 @@ static int compute_frame_features(DenoiseState *st, kiss_fft_cpx *X, kiss_fft_cp
   st->last_gain = gain;
   for (i=0;i<WINDOW_SIZE;i++)
     p[i] = st->pitch_buf[PITCH_BUF_SIZE-WINDOW_SIZE-pitch_index+i];
-  apply_window(p);
-  forward_transform(P, p);
+  apply_window(&st->common, p);
+  forward_transform(&st->common, P, p);
   compute_band_energy(Ep, P);
   compute_band_corr(Exp, X, P);
   for (i=0;i<NB_BANDS;i++) Exp[i] = Exp[i]/sqrt(.001+Ex[i]*Ep[i]);
-  dct(tmp, Exp);
+  dct(&st->common, tmp, Exp);
   for (i=0;i<NB_DELTA_CEPS;i++) features[NB_BANDS+2*NB_DELTA_CEPS+i] = tmp[i];
   features[NB_BANDS+2*NB_DELTA_CEPS] -= 1.3;
   features[NB_BANDS+2*NB_DELTA_CEPS+1] -= 0.9;
@@ -375,7 +373,7 @@ static int compute_frame_features(DenoiseState *st, kiss_fft_cpx *X, kiss_fft_cp
     RNN_CLEAR(features, NB_FEATURES);
     return 1;
   }
-  dct(features, Ly);
+  dct(&st->common, features, Ly);
   features[0] -= 12;
   features[1] -= 4;
   ceps_0 = st->cepstral_mem[st->memid];
@@ -416,8 +414,8 @@ static int compute_frame_features(DenoiseState *st, kiss_fft_cpx *X, kiss_fft_cp
 static void frame_synthesis(DenoiseState *st, float *out, const kiss_fft_cpx *y) {
   float x[WINDOW_SIZE];
   int i;
-  inverse_transform(x, y);
-  apply_window(x);
+  inverse_transform(&st->common, x, y);
+  apply_window(&st->common, x);
   for (i=0;i<FRAME_SIZE;i++) out[i] = x[i] + st->synthesis_mem[i];
   RNN_COPY(st->synthesis_mem, &x[FRAME_SIZE], FRAME_SIZE);
 }
