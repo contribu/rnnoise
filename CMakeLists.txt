@@ -16,11 +16,11 @@ include_directories(
   src
   /opt/intel/ipp/include
 )
+
+if(APPLE)
 link_directories(
   /opt/intel/ipp/lib
 )
-
-if(APPLE)
 set(IPP_LIBS
   /opt/intel/ipp/lib/libippi.dylib
   /opt/intel/ipp/lib/libipps.dylib
@@ -29,6 +29,9 @@ set(IPP_LIBS
 )
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rpath /opt/intel/ipp/lib")
 else()
+link_directories(
+  /opt/intel/ipp/lib/intel64
+)
 set(IPP_LIBS
   libippi.a
   libipps.a
