@@ -628,7 +628,9 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in, int p
 DEFINE_string(clean, "", "clean raw pcm path");
 DEFINE_string(noise, "", "noise raw pcm path");
 DEFINE_string(output, "", "output path (unused but must be specified)");
-DEFINE_int32(output_count, 50000000, "output frame count");
+DEFINE_int64(output_count, 50000000, "output frame count");
+DEFINE_int64(clean_initial_pos, 0, "clean initial pos in sample");
+DEFINE_int64(noise_initial_pos, 0, "noise initial pos in sample");
 
 namespace {
     static float uni_rand() {
@@ -673,8 +675,10 @@ int main(int argc, char **argv) {
     noisy = rnnoise_create();
     f1 = fopen(FLAGS_clean.c_str(), "r");
     if (!f1) throw std::logic_error("cannot open " + FLAGS_clean);
+    if (fseek(f1, FLAGS_clean_initial_pos * 2, SEEK_SET)) throw std::logic_error("fseek failed");
     f2 = fopen(FLAGS_noise.c_str(), "r");
     if (!f2) throw std::logic_error("cannot open " + FLAGS_noise);
+    if (fseek(f2, FLAGS_noise_initial_pos * 2, SEEK_SET)) throw std::logic_error("fseek failed");
     fout = fopen(FLAGS_output.c_str(), "w");
     if (!fout) throw std::logic_error("cannot open " + FLAGS_output);
     for(i=0;i<150;i++) {
