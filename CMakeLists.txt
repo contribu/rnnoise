@@ -20,14 +20,22 @@ link_directories(
   /opt/intel/ipp/lib
 )
 
+if(APPLE)
 set(IPP_LIBS
- /opt/intel/ipp/lib/libippi.dylib
- /opt/intel/ipp/lib/libipps.dylib
- /opt/intel/ipp/lib/libippvm.dylib
- /opt/intel/ipp/lib/libippcore.dylib
+  /opt/intel/ipp/lib/libippi.dylib
+  /opt/intel/ipp/lib/libipps.dylib
+  /opt/intel/ipp/lib/libippvm.dylib
+  /opt/intel/ipp/lib/libippcore.dylib
 )
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rpath /opt/intel/ipp/lib")
-
+else()
+set(IPP_LIBS
+  libippi.a
+  libipps.a
+  libippcore.a
+  libippvm.a
+)
+endif()
 
 add_compile_definitions(RNNOISE_FLOAT_WEIGHT)
 add_compile_definitions(RNNOISE_IPP)
