@@ -5,6 +5,7 @@
 #endif
 
 #include "rnn.h"
+#include "rnn_data.h"
 
 static const rnn_weight input_dense_weights[1008] = {
    -10, 0, -3, 1, -8, -6, 3, -13,
@@ -11029,3 +11030,4 @@ const DenseLayer vad_output = {
    24, 1, ACTIVATION_SIGMOID
 };
 
+const RNNTestData *rnn_test_data = 0;

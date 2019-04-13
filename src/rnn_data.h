@@ -29,5 +29,7 @@ struct RNNState {
   float denoise_gru_state[DENOISE_GRU_SIZE];
 };
 
+typedef struct { float *input; float *gain; float *vad; } RNNTestData;
+extern const RNNTestData *rnn_test_data;
 
 #endif
