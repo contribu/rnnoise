@@ -35,7 +35,8 @@ add_compile_definitions(RNNOISE_IPP)
 file(GLOB RNNOISE_SOURCES src/*)
 
 add_executable(rnnoise_demo ${RNNOISE_SOURCES} examples/rnnoise_demo.c)
-target_compile_definitions(rnnoise_demo PRIVATE TRAINING=0 ${IPP_LIBS})
+target_compile_definitions(rnnoise_demo PRIVATE TRAINING=0)
+target_link_libraries(rnnoise_demo ${IPP_LIBS})
 
 add_executable(denoise_training ${RNNOISE_SOURCES})
 target_compile_definitions(denoise_training PRIVATE TRAINING=1)
