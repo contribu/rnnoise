@@ -49,7 +49,7 @@ def printLayer(f, hf, layer):
     else:
         activation = 'TANH'
     if len(weights) > 2:
-        converted = preprocess_weights_for_loading(layer, weights)
+        converted = preprocess_weights_for_loading(GRU(layer.units, recurrent_activation='sigmoid', reset_after=True, return_sequences=True), weights)
         f.write('const GRULayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}_recurrent_weights,\n   {}, {}, ACTIVATION_{}, 1\n}};\n\n'
                 .format(name, name, name, name, converted[0].shape[0], int(converted[0].shape[1]/3), activation))
         hf.write('#define {}_SIZE {}\n'.format(name.upper(), int(converted[0].shape[1]/3)))
