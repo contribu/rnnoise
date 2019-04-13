@@ -195,6 +195,9 @@ class MyCLI < Thor
     
       # check test data
       ffmpeg -f s16le -ac 1 -ar 48000 -i clean.raw /tmp/preview.ogg
+
+      # check test data (only 60sec)
+      ffmpeg -f s16le -ac 1 -ar 48000 -i clean.raw -t 60 /tmp/preview.ogg
     EOS
   end
 end
