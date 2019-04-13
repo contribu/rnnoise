@@ -39,6 +39,8 @@ def printVector(f, vector, name, scale=256):
 def printLayer(f, hf, layer):
     print(layer.name)
     weights = layer.get_weights()
+    if len(weights) > 2:
+        weights = preprocess_weights_for_loading(GRU(layer.units, recurrent_activation='sigmoid', reset_after=True, return_sequences=True), weights)
     printVector(f, weights[0], layer.name + '_weights')
     if len(weights) > 2:
         printVector(f, weights[1], layer.name + '_recurrent_weights')
@@ -49,10 +51,9 @@ def printLayer(f, hf, layer):
     else:
         activation = 'TANH'
     if len(weights) > 2:
-        converted = preprocess_weights_for_loading(GRU(layer.units, recurrent_activation='sigmoid', reset_after=True, return_sequences=True), weights)
         f.write('const GRULayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}_recurrent_weights,\n   {}, {}, ACTIVATION_{}, 1\n}};\n\n'
-                .format(name, name, name, name, converted[0].shape[0], int(converted[0].shape[1]/3), activation))
-        hf.write('#define {}_SIZE {}\n'.format(name.upper(), int(converted[0].shape[1]/3)))
+                .format(name, name, name, name, weights[0].shape[0], int(weights[0].shape[1]/3), activation))
+        hf.write('#define {}_SIZE {}\n'.format(name.upper(), int(weights[0].shape[1]/3)))
         hf.write('extern const GRULayer {};\n\n'.format(name));
     else:
         f.write('const DenseLayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}, {}, ACTIVATION_{}\n}};\n\n'
