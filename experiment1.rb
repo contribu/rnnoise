@@ -149,12 +149,12 @@ class MyCLI < Thor
   desc 'prepare_vec', 'prepare '
   option :clean, required: true, desc: 'clean raw audio path'
   option :noise, required: true, desc: 'noise raw audio path'
-  option :output, required: true, desc: 'feature vec h5'
+  # option :output, required: true, desc: 'feature vec h5'
   option :float_output, required: true, desc: 'feature vec raw float'
   option :output_count, required: true, desc: 'output frame count'
   def prepare_vec
     `#{denoise_training_path} --clean #{options[:clean]} --noise #{options[:noise]} --output /tmp/unused --output_count #{options[:output_count]} > #{options[:float_output]}`
-    `pipenv run python training/bin2hdf5.py #{options[:float_output]} #{options[:output_count]} 87 #{options[:output]}`
+    # `pipenv run python training/bin2hdf5.py #{options[:float_output]} #{options[:output_count]} 87 #{options[:output]}`
   end
 
   desc 'manual', 'show manual'
