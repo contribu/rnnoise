@@ -15,28 +15,31 @@ include_directories(
   include
   src
   /opt/intel/ipp/include
+  /usr/local/opt/libtensorflow/include
 )
 
 if(APPLE)
 link_directories(
   /opt/intel/ipp/lib
 )
-set(IPP_LIBS
+set(COMMON_LIBS
   /opt/intel/ipp/lib/libippi.dylib
   /opt/intel/ipp/lib/libipps.dylib
   /opt/intel/ipp/lib/libippvm.dylib
   /opt/intel/ipp/lib/libippcore.dylib
+  /usr/local/opt/libtensorflow/lib/libtensorflow.so
 )
 SET(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -rpath /opt/intel/ipp/lib")
 else()
 link_directories(
   /opt/intel/ipp/lib/intel64
 )
-set(IPP_LIBS
+set(COMMON_LIBS
   libippi.a
   libipps.a
   libippcore.a
   libippvm.a
+  libtensorflow.a
 )
 endif()
 
@@ -47,13 +50,13 @@ file(GLOB RNNOISE_SOURCES src/*)
 
 add_executable(rnnoise_demo ${RNNOISE_SOURCES} examples/rnnoise_demo.c)
 target_compile_definitions(rnnoise_demo PRIVATE TRAINING=0)
-target_link_libraries(rnnoise_demo ${IPP_LIBS})
+target_link_libraries(rnnoise_demo ${COMMON_LIBS})
 
 add_executable(denoise_training ${RNNOISE_SOURCES})
 target_compile_definitions(denoise_training PRIVATE TRAINING=1)
-target_link_libraries(denoise_training gflags ${IPP_LIBS})
+target_link_libraries(denoise_training gflags ${COMMON_LIBS})
 
 file(GLOB TEST_SOURCES test/*)
 add_executable(test ${RNNOISE_SOURCES} ${TEST_SOURCES})
 target_compile_definitions(test PRIVATE TRAINING=0)
-target_link_libraries(test gtest gtest_main ${IPP_LIBS})
+target_link_libraries(test gtest gtest_main ${COMMON_LIBS})

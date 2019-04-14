@@ -1,25 +1,38 @@
 #include "gtest/gtest.h"
 
+#include <fstream>
+#include <vector>
 #include "tensorflow_model.h"
 
 TEST(TensorflowModel, SmokeTest) {
-    RNNState rnn = { 0 };
-    const auto eps = 1e-5;
-    for (int i = 0; i < 2000; i++) {
-        const float *input = rnn_test_data[0].input + 42 * i;
-        const float *expected_gain = rnn_test_data[0].gain + 22 * i;
-        const float *expected_vad = rnn_test_data[0].vad + i;
-        
-        float actual_gain[22];
-        float actual_vad[1];
-        
-        compute_rnn(&rnn, actual_gain, actual_vad, input);
-        
-        for (int j = 0; j < 22; j++) {
-            EXPECT_NEAR(expected_gain[j], actual_gain[j], eps);
-        }
-        for (int j = 0; j < 1; j++) {
-            EXPECT_NEAR(expected_vad[j], actual_vad[j], eps);
-        }
+    std::ifstream ifs("testmodel.pb", std::ios::binary | std::ios::ate);
+    std::streamsize size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+    std::vector<char> buffer(size);
+    EXPECT_TRUE(ifs.read(buffer.data(), size));
+    rnnoise::TensorflowModel model(buffer.data(), buffer.size());
+    
+    std::vector<float> input_buffer(16 * 42);
+    std::vector<float> output_denoise_buffer(22);
+    std::vector<float> output_val_buffer(1);
+    rnnoise::TensorflowModel::Input input;
+    input.data = input_buffer.data();
+    input.dims.push_back(0);
+    input.dims.push_back(16);
+    input.dims.push_back(42);
+    input.name = "main_input";
+    std::vector<rnnoise::TensorflowModel::Output> outputs;
+    {
+        rnnoise::TensorflowModel::Output output;
+        output.data = output_denoise_buffer.data();
+        output.name = "denoise_output/Sigmoid";
+        outputs.push_back(output);
     }
+    {
+        rnnoise::TensorflowModel::Output output;
+        output.data = output_val_buffer.data();
+        output.name = "vad_output/Sigmoid";
+        outputs.push_back(output);
+    }
+    model.Predict(&input, 1, outputs.data(), 2);
 }
