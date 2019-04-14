@@ -40,8 +40,8 @@ import numpy as np
 # import mixup_generator from .py
 # mixup_generator = importlib.machinery.SourceFileLoader('mixup_generator', os.path.join(os.path.dirname(__file__), '../deps/mixup-generator/mixup_generator.py')).load_module()
 
-dump_to_simple_cpp = importlib.machinery.SourceFileLoader('dump_to_simple_cpp', os.path.join(os.path.dirname(__file__), '../deps/keras2cpp/dump_to_simple_cpp_custom.py')).load_module()
-pt = importlib.machinery.SourceFileLoader('pt', os.path.join(os.path.dirname(__file__), '../deps/pocket-tensor/pt.py')).load_module()
+# dump_to_simple_cpp = importlib.machinery.SourceFileLoader('dump_to_simple_cpp', os.path.join(os.path.dirname(__file__), '../deps/keras2cpp/dump_to_simple_cpp_custom.py')).load_module()
+# pt = importlib.machinery.SourceFileLoader('pt', os.path.join(os.path.dirname(__file__), '../deps/pocket-tensor/pt.py')).load_module()
 
 #import tensorflow as tf
 #from keras.backend.tensorflow_backend import set_session
@@ -295,14 +295,14 @@ os.makedirs(os.path.join(dir), exist_ok=True)
 
 # plot_model(model, to_file=dir + "/model.png")
 
-class DumpToSimpleCppCallback(keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs={}):
-        with open(dir + '/cppmodel{}.nnet'.format(epoch), 'w') as fout:
-            dump_to_simple_cpp.dump_to_simple_cpp(model, fout)
-
-class DumpPocketTensor(keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs={}):
-        pt.export_model(model, dir + '/cppmodel{}.nnet'.format(epoch))
+# class DumpToSimpleCppCallback(keras.callbacks.Callback):
+#     def on_epoch_end(self, epoch, logs={}):
+#         with open(dir + '/cppmodel{}.nnet'.format(epoch), 'w') as fout:
+#             dump_to_simple_cpp.dump_to_simple_cpp(model, fout)
+#
+# class DumpPocketTensor(keras.callbacks.Callback):
+#     def on_epoch_end(self, epoch, logs={}):
+#         pt.export_model(model, dir + '/cppmodel{}.nnet'.format(epoch))
 
 modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, 'weights.{epoch:03d}-{val_loss:.2f}.hdf5'),
                                                   monitor='val_loss',
