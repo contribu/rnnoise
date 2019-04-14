@@ -242,7 +242,7 @@ x_train = all_data[:nb_sequences*window_size, :42]
 x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
 
 y_train = all_data[:nb_sequences*window_size, 42:64]
-y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
+y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size // 2,:]
 
 noise_train = all_data[:nb_sequences*window_size, 64:86]
 noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
