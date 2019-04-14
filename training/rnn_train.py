@@ -13,6 +13,7 @@ import random
 from sklearn.model_selection import train_test_split
 
 import keras
+from keras.utils import plot_model
 from keras.models import Sequential
 from keras.models import Model
 from keras.layers import Input
@@ -208,25 +209,33 @@ elif args.arch == 'cnn':
     main_input = Input(shape=(window_size, 42), name='main_input')
     reshaped = Reshape((window_size, 42, 1))(main_input)
 
-    conv1 = Conv2D(int(8 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', activation='elu')(reshaped)
+    conv1 = Conv2D(int(8 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(reshaped)
     conv1 = keras.layers.normalization.BatchNormalization()(conv1)
+    conv1 = keras.layers.Activation('elu')(conv1)
 
-    conv_hori2 = Conv2D(int(8 * args.hidden_units), (window_size, 1), dilation_rate=(1, 1), padding='same', activation='elu')(conv1)
+    conv_hori2 = Conv2D(int(8 * args.hidden_units), (window_size, 1), dilation_rate=(1, 1), padding='same', use_bias=False)(conv1)
     conv_hori2 = keras.layers.normalization.BatchNormalization()(conv_hori2)
-    conv_vert2 = Conv2D(int(8 * args.hidden_units), (1, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv1)
+    conv_hori2 = keras.layers.Activation('elu')(conv_hori2)
+    conv_vert2 = Conv2D(int(8 * args.hidden_units), (1, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv1)
     conv_vert2 = keras.layers.normalization.BatchNormalization()(conv_vert2)
+    conv_vert2 = keras.layers.Activation('elu')(conv_vert2)
     conv2 = keras.layers.concatenate([conv_hori2, conv_vert2])
 
-    conv3 = Conv2D(int(16 * args.hidden_units), (7, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv2)
+    conv3 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv2)
     conv3 = keras.layers.normalization.BatchNormalization()(conv3)
+    conv3 = keras.layers.Activation('elu')(conv3)
     conv3 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
 
-    conv4 = Conv2D(int(16 * args.hidden_units), (7, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv3)
+    conv4 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv3)
     conv4 = keras.layers.normalization.BatchNormalization()(conv4)
+    conv4 = keras.layers.Activation('elu')(conv4)
+    conv4 = keras.layers.Add()([conv3, conv4])
     conv4 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
 
-    conv5 = Conv2D(int(16 * args.hidden_units), (7, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv4)
+    conv5 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv4)
     conv5 = keras.layers.normalization.BatchNormalization()(conv5)
+    conv5 = keras.layers.Activation('elu')(conv5)
+    conv5 = keras.layers.Add()([conv4, conv5])
     conv5 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
 
     flatten = Flatten()(conv5);
@@ -275,6 +284,7 @@ print(len(x_train), 'train sequences. x shape =', x_train.shape, 'y shape = ', y
 print('Train...')
 dir = datetime.datetime.now().strftime("train%Y%m%d_%H%M%S")
 os.makedirs(os.path.join(dir), exist_ok=True)
+plot_model(model, to_file=dir + "/model.png")
 modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, 'weights.{epoch:03d}-{val_loss:.2f}.hdf5'),
                                                   monitor='val_loss',
                                                   verbose=1,
