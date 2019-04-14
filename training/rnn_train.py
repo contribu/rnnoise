@@ -55,6 +55,7 @@ parser.add_argument('--mixup_alpha', type=float, default=0.2)
 parser.add_argument('--learning_rate', type=float, default=1e-3)
 parser.add_argument('--safe_crossentropy_factor', type=float, default=0.0)
 parser.add_argument('--loss_type', default='original')
+parser.add_argument('--log_loss_bias', type=float, default='1e-7')
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -72,7 +73,7 @@ def msse(y_true, y_pred):
 
 def mycost(y_true, y_pred):
     if args.loss_type == 'log':
-        return K.mean(mymask(y_true) * K.square(K.log(1e-7 + y_pred) - K.log(1e-7 + K.abs(y_true))), axis=-1)
+        return K.mean(mymask(y_true) * K.square(K.log(args.log_loss_bias + y_pred) - K.log(args.log_loss_bias + K.abs(y_true))), axis=-1)
     elif args.loss_type == 'original':
         return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))) + K.square(K.sqrt(y_pred) - K.sqrt(y_true)) + 0.01*my_safecrossentropy(y_pred, y_true)), axis=-1)
     else:
