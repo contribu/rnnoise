@@ -71,10 +71,12 @@ def msse(y_true, y_pred):
     return K.mean(mymask(y_true) * K.square(K.sqrt(y_pred) - K.sqrt(y_true)), axis=-1)
 
 def mycost(y_true, y_pred):
-    return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))) + K.square(K.sqrt(y_pred) - K.sqrt(y_true)) + 0.01*my_safecrossentropy(y_pred, y_true)), axis=-1)
-
-def mycostlog(y_true, y_pred):
-    return K.mean(mymask(y_true) * K.square(K.log(1e-7 + y_pred) - K.log(1e-7 + K.abs(y_true))), axis=-1)
+    if args.loss_type == 'log':
+        return K.mean(mymask(y_true) * K.square(K.log(1e-7 + y_pred) - K.log(1e-7 + K.abs(y_true))), axis=-1)
+    elif args.loss_type == 'original':
+        return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))) + K.square(K.sqrt(y_pred) - K.sqrt(y_true)) + 0.01*my_safecrossentropy(y_pred, y_true)), axis=-1)
+    else:
+        raise Exception('unknown loss_type')
 
 def my_accuracy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * K.equal(y_true, K.round(y_pred)), axis=-1)
@@ -195,13 +197,7 @@ model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 
 optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=True)
 
-if args.loss_type == 'log':
-    denoise_cost = mycostlog
-elif args.loss_type == 'original':
-    denoise_cost = mycost
-else:
-    raise Exception('unknown loss_type')
-model.compile(loss=[denoise_cost, my_crossentropy],
+model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
               optimizer=optimizer, loss_weights=[10, 0.5])
 
