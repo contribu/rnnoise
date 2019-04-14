@@ -209,8 +209,9 @@ if args.arch == 'original':
 
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'cnn':
-    main_input = Input(shape=(window_size, 42, 1), name='main_input')
-    conv1 = Conv2D(int(16 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(main_input)
+    main_input = Input(shape=(window_size, 42), name='main_input')
+    reshaped = Reshape((window_size, 42, 1))(main_input)
+    conv1 = Conv2D(int(16 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(reshaped)
     conv1 = keras.layers.normalization.BatchNormalization()(conv1)
     conv1 = keras.layers.Activation('elu')(conv1)
 
@@ -278,7 +279,7 @@ if args.arch == 'original':
     noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
     vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))
 elif args.arch == 'cnn':
-    x_train = np.reshape(x_train, (nb_sequences, window_size, 42, 1))
+    x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
     y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
     noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
     vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size - 1,:]
@@ -292,7 +293,7 @@ print('Train...')
 dir = datetime.datetime.now().strftime("train%Y%m%d_%H%M%S")
 os.makedirs(os.path.join(dir), exist_ok=True)
 
-plot_model(model, to_file=dir + "/model.png")
+# plot_model(model, to_file=dir + "/model.png")
 
 class DumpToSimpleCppCallback(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
