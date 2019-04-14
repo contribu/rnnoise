@@ -38,10 +38,15 @@ def concat_audio(input_paths, output_path, max_sec:)
           raw_path = "#{dir}/output.raw"
 
           case input_path
-          when /\.(txt|jpg|jpeg|png|json|md|ini|reapeaks|pdf)/
+          when /\.(txt|jpg|jpeg|png|json|md|ini|reapeaks|pdf|html|htm)/
             return []
           when /\.zip$/
+            FileUtils.mkdir_p("#{dir}/extracted")
             exec_command("#{Shellwords.join(['unzip', '-d', "#{dir}/extracted", input_path])} 2>&1")
+            return Dir.glob("#{dir}/extracted/**/*").sort.map { |path| process_file.call(path) }
+          when /\.tar\.gz$/
+            FileUtils.mkdir_p("#{dir}/extracted")
+            exec_command("#{Shellwords.join(['tar', '-zxvf', input_path, '-C', "#{dir}/extracted"])} 2>&1")
             return Dir.glob("#{dir}/extracted/**/*").sort.map { |path| process_file.call(path) }
           when /\.raw$/
             # normalize
