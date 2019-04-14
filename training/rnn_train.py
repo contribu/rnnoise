@@ -53,10 +53,13 @@ parser.add_argument('--mmap', action='store_true')
 parser.add_argument('--mixup', type=int, default=0)
 parser.add_argument('--mixup_alpha', type=float, default=0.2)
 parser.add_argument('--learning_rate', type=float, default=1e-3)
+parser.add_argument('--safe_crossentropy_factor', type=float, default=0.0)
+parser.add_argument('--loss_type', default='original')
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
-    return K.binary_crossentropy(0.1 + 0.8 * y_pred, 0.1 + 0.8 * y_true)
+    f = args.safe_crossentropy_factor
+    return K.binary_crossentropy(f + (1.0 - 2 * f) * y_pred, f + (1.0 - 2 * f) * y_true)
 
 def my_crossentropy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * my_safecrossentropy(y_pred, y_true), axis=-1)
@@ -69,6 +72,9 @@ def msse(y_true, y_pred):
 
 def mycost(y_true, y_pred):
     return K.mean(mymask(y_true) * (10*K.square(K.square(K.sqrt(y_pred) - K.sqrt(y_true))) + K.square(K.sqrt(y_pred) - K.sqrt(y_true)) + 0.01*my_safecrossentropy(y_pred, y_true)), axis=-1)
+
+def mycostlog(y_true, y_pred):
+    return K.mean(mymask(y_true) * K.square(K.log(1e-7 + y_pred) - K.log(1e-7 + K.abs(y_true))), axis=-1)
 
 def my_accuracy(y_true, y_pred):
     return K.mean(2*K.abs(y_true-0.5) * K.equal(y_true, K.round(y_pred)), axis=-1)
@@ -189,7 +195,13 @@ model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 
 optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=True)
 
-model.compile(loss=[mycost, my_crossentropy],
+if args.loss_type == 'log':
+    denoise_cost = mycostlog
+elif args.loss_type == 'original':
+    denoise_cost = mycost
+else:
+    raise Exception('unknown loss_type')
+model.compile(loss=[denoise_cost, my_crossentropy],
               metrics=[msse],
               optimizer=optimizer, loss_weights=[10, 0.5])
 
