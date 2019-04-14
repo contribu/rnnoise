@@ -207,9 +207,9 @@ if args.arch == 'original':
 elif args.arch == 'cnn':
     main_input = Input(shape=(window_size, 42), name='main_input')
     reshaped = Reshape((window_size, 42, 1))(main_input)
-    conv1 = Conv2D(8, (3, 3), dilation_rate=(2, 2), padding='same', activation='elu')(reshaped)
-    conv2 = Conv2D(8, (3, 3), dilation_rate=(2, 2), padding='same', activation='elu')(conv1)
-    conv3 = Conv2D(8, (3, 3), dilation_rate=(2, 2), padding='same', activation='elu')(conv2)
+    conv1 = Conv2D(int(8 * args.hidden_units), (5, 3), dilation_rate=(4, 1), padding='same', activation='elu')(reshaped)
+    conv2 = Conv2D(int(8 * args.hidden_units), (5, 3), dilation_rate=(4, 1), padding='same', activation='elu')(conv1)
+    conv3 = Conv2D(int(8 * args.hidden_units), (5, 3), dilation_rate=(4, 1), padding='same', activation='elu')(conv2)
     flatten = Flatten()(conv3)
     vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(flatten)
     denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(flatten)
@@ -242,7 +242,7 @@ x_train = all_data[:nb_sequences*window_size, :42]
 x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
 
 y_train = all_data[:nb_sequences*window_size, 42:64]
-y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size // 2,:]
+y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
 
 noise_train = all_data[:nb_sequences*window_size, 64:86]
 noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
