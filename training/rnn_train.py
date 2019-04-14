@@ -224,19 +224,19 @@ elif args.arch == 'cnn':
     conv3 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv2)
     conv3 = keras.layers.normalization.BatchNormalization()(conv3)
     conv3 = keras.layers.Activation('elu')(conv3)
-    conv3 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
+    conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
 
     conv4 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv3)
     conv4 = keras.layers.normalization.BatchNormalization()(conv4)
     conv4 = keras.layers.Activation('elu')(conv4)
     conv4 = keras.layers.Add()([conv3, conv4])
-    conv4 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
+    conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
 
     conv5 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv4)
     conv5 = keras.layers.normalization.BatchNormalization()(conv5)
     conv5 = keras.layers.Activation('elu')(conv5)
     conv5 = keras.layers.Add()([conv4, conv5])
-    conv5 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
+    conv5 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
 
     flatten = Flatten()(conv5);
     vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(flatten)
