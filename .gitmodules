@@ -7,3 +7,12 @@
 [submodule "deps/googletest"]
 	path = deps/googletest
 	url = https://github.com/google/googletest.git
+[submodule "deps/keras2cpp"]
+	path = deps/keras2cpp
+	url = https://github.com/contribu/keras2cpp.git
+[submodule "deps/pocket-tensor"]
+	path = deps/pocket-tensor
+	url = https://github.com/GValiente/pocket-tensor.git
+[submodule "deps/keras_to_tensorflow"]
+	path = deps/keras_to_tensorflow
+	url = https://github.com/amir-abdi/keras_to_tensorflow.git

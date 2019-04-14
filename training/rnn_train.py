@@ -40,6 +40,9 @@ import numpy as np
 # import mixup_generator from .py
 # mixup_generator = importlib.machinery.SourceFileLoader('mixup_generator', os.path.join(os.path.dirname(__file__), '../deps/mixup-generator/mixup_generator.py')).load_module()
 
+dump_to_simple_cpp = importlib.machinery.SourceFileLoader('dump_to_simple_cpp', os.path.join(os.path.dirname(__file__), '../deps/keras2cpp/dump_to_simple_cpp_custom.py')).load_module()
+pt = importlib.machinery.SourceFileLoader('pt', os.path.join(os.path.dirname(__file__), '../deps/pocket-tensor/pt.py')).load_module()
+
 #import tensorflow as tf
 #from keras.backend.tensorflow_backend import set_session
 #config = tf.ConfigProto()
@@ -206,10 +209,8 @@ if args.arch == 'original':
 
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'cnn':
-    main_input = Input(shape=(window_size, 42), name='main_input')
-    reshaped = Reshape((window_size, 42, 1))(main_input)
-
-    conv1 = Conv2D(int(8 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(reshaped)
+    main_input = Input(shape=(window_size, 42, 1), name='main_input')
+    conv1 = Conv2D(int(16 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(main_input)
     conv1 = keras.layers.normalization.BatchNormalization()(conv1)
     conv1 = keras.layers.Activation('elu')(conv1)
 
@@ -239,8 +240,8 @@ elif args.arch == 'cnn':
     conv5 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
 
     flatten = Flatten()(conv5);
-    vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(flatten)
-    denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(flatten)
+    vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
+    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 else:
     raise 'unknown arch'
@@ -267,16 +268,22 @@ else:
 nb_sequences = len(all_data)//window_size
 print(nb_sequences, ' sequences')
 x_train = all_data[:nb_sequences*window_size, :42]
-x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
-
 y_train = all_data[:nb_sequences*window_size, 42:64]
-y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
-
 noise_train = all_data[:nb_sequences*window_size, 64:86]
-noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
-
 vad_train = all_data[:nb_sequences*window_size, 86:87]
-vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size - 1,:]
+
+if args.arch == 'original':
+    x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
+    y_train = np.reshape(y_train, (nb_sequences, window_size, 22))
+    noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
+    vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))
+elif args.arch == 'cnn':
+    x_train = np.reshape(x_train, (nb_sequences, window_size, 42, 1))
+    y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
+    noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
+    vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size - 1,:]
+else:
+    raise 'unknown arch'
 
 all_data = 0
 print(len(x_train), 'train sequences. x shape =', x_train.shape, 'y shape = ', y_train.shape)
@@ -284,7 +291,18 @@ print(len(x_train), 'train sequences. x shape =', x_train.shape, 'y shape = ', y
 print('Train...')
 dir = datetime.datetime.now().strftime("train%Y%m%d_%H%M%S")
 os.makedirs(os.path.join(dir), exist_ok=True)
+
 plot_model(model, to_file=dir + "/model.png")
+
+class DumpToSimpleCppCallback(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        with open(dir + '/cppmodel{}.nnet'.format(epoch), 'w') as fout:
+            dump_to_simple_cpp.dump_to_simple_cpp(model, fout)
+
+class DumpPocketTensor(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        pt.export_model(model, dir + '/cppmodel{}.nnet'.format(epoch))
+
 modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, 'weights.{epoch:03d}-{val_loss:.2f}.hdf5'),
                                                   monitor='val_loss',
                                                   verbose=1,
