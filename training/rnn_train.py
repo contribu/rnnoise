@@ -207,10 +207,29 @@ if args.arch == 'original':
 elif args.arch == 'cnn':
     main_input = Input(shape=(window_size, 42), name='main_input')
     reshaped = Reshape((window_size, 42, 1))(main_input)
-    conv1 = Conv2D(int(8 * args.hidden_units), (5, 3), dilation_rate=(4, 1), padding='same', activation='elu')(reshaped)
-    conv2 = Conv2D(int(8 * args.hidden_units), (5, 3), dilation_rate=(4, 1), padding='same', activation='elu')(conv1)
-    conv3 = Conv2D(int(8 * args.hidden_units), (5, 3), dilation_rate=(4, 1), padding='same', activation='elu')(conv2)
-    flatten = Flatten()(conv3)
+
+    conv1 = Conv2D(int(8 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', activation='elu')(reshaped)
+    conv1 = keras.layers.normalization.BatchNormalization()(conv1)
+
+    conv_hori2 = Conv2D(int(8 * args.hidden_units), (window_size, 1), dilation_rate=(1, 1), padding='same', activation='elu')(conv1)
+    conv_hori2 = keras.layers.normalization.BatchNormalization()(conv_hori2)
+    conv_vert2 = Conv2D(int(8 * args.hidden_units), (1, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv1)
+    conv_vert2 = keras.layers.normalization.BatchNormalization()(conv_vert2)
+    conv2 = keras.layers.concatenate([conv_hori2, conv_vert2])
+
+    conv3 = Conv2D(int(16 * args.hidden_units), (7, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv2)
+    conv3 = keras.layers.normalization.BatchNormalization()(conv3)
+    conv3 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
+
+    conv4 = Conv2D(int(16 * args.hidden_units), (7, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv3)
+    conv4 = keras.layers.normalization.BatchNormalization()(conv4)
+    conv4 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
+
+    conv5 = Conv2D(int(16 * args.hidden_units), (7, 42), dilation_rate=(1, 1), padding='same', activation='elu')(conv4)
+    conv5 = keras.layers.normalization.BatchNormalization()(conv5)
+    conv5 = keras.layers.MaxPooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
+
+    flatten = Flatten()(conv5);
     vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(flatten)
     denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(flatten)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
@@ -242,13 +261,13 @@ x_train = all_data[:nb_sequences*window_size, :42]
 x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
 
 y_train = all_data[:nb_sequences*window_size, 42:64]
-y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size // 2,:]
+y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
 
 noise_train = all_data[:nb_sequences*window_size, 64:86]
 noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
 
 vad_train = all_data[:nb_sequences*window_size, 86:87]
-vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size // 2,:]
+vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size - 1,:]
 
 all_data = 0
 print(len(x_train), 'train sequences. x shape =', x_train.shape, 'y shape = ', y_train.shape)
