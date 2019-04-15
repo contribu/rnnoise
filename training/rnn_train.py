@@ -241,12 +241,23 @@ elif args.arch == 'cnn':
     # conv1 = keras.layers.normalization.BatchNormalization()(conv1)
     # conv1 = keras.layers.Activation('elu')(conv1)
 
-    conv1 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), reshaped)
-    conv2 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv1)
-    conv3 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv2)
-    conv4 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv3)
-    conv5 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv4)
-    conv5 = keras.layers.AveragePooling2D(pool_size=(window_size // 1, 1), strides=None, padding='valid')(conv5)
+    # 小さいデータセットでいろいろ手元で実験した結果
+    # 周波数方向に撹拌するのは効くらしい (1, 42)など。(3, 3)だけとかにして撹拌しなくすると、かなり成績落ちる
+    # http://www.jordipons.me/media/UPC-2018.pdf とも整合している
+    # res_block2の数は、4 < 5 = 6らしい
+
+    conv1 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), reshaped)
+    conv1 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv1)
+    conv2 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv1)
+    conv2 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv2)
+    conv3 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv2)
+    conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
+    conv4 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv3)
+    conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
+    conv5 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv4)
+    conv5 = keras.layers.AveragePooling2D(pool_size=(window_size // 16, 1), strides=None, padding='valid')(conv5)
+    # conv6 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv5)
+    # conv6 = keras.layers.AveragePooling2D(pool_size=(window_size // 32, 1), strides=None, padding='valid')(conv6)
 
     # conv_hori2 = res_block(int(8 * args.hidden_units), (window_size, 1), conv1)
     # conv_vert2 = res_block(int(8 * args.hidden_units), (1, 42), conv1)
