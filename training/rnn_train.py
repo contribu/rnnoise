@@ -67,6 +67,8 @@ parser.add_argument('--log_loss_bias', type=float, default='1e-7')
 parser.add_argument('--arch', default='original')
 parser.add_argument('--window_size', type=int, default=2000)
 parser.add_argument('--window_overlap', type=int, default=0)
+parser.add_argument('--noise_prob', type=float, default=0.0)
+parser.add_argument('--noise_stddev', type=float, default=10.0)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -184,6 +186,7 @@ window_size = args.window_size
 
 # https://deepage.net/deep_learning/2016/11/30/resnet.html
 def double_cnn_block(unit, conv_shape, input):
+    # wide res net
     x = input
     x = keras.layers.normalization.BatchNormalization()(x)
     x = keras.layers.Activation('elu')(x)
@@ -281,6 +284,27 @@ elif args.arch == 'cnn2':
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
     denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
+elif args.arch == 'cnn3':
+    # cnnをベースにパフォーマンスを考慮したもの
+    main_input = Input(shape=(window_size, 42), name='main_input')
+    input_dropout = Dropout(args.input_dropout)(main_input)
+    reshaped = Reshape((window_size, 42, 1))(input_dropout)
+
+    conv1 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), reshaped)
+    conv1 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv1)
+    conv2 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv1)
+    conv2 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv2)
+    conv3 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv2)
+    conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
+    conv4 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv3)
+    conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
+    conv5 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv4)
+    conv5 = keras.layers.AveragePooling2D(pool_size=(window_size // 16, 1), strides=None, padding='valid')(conv5)
+
+    flatten = Flatten()(conv5);
+    vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
+    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
+    model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 else:
     raise 'unknown arch'
 
@@ -309,6 +333,10 @@ else:
 nb_sequences = len(all_data)//window_size
 print(nb_sequences, ' sequences')
 x_train = all_data[:nb_sequences*window_size, :42]
+if args.noise_prob > 0:
+    for i in range(nb_sequences):
+        act = np.random.binomial(1, args.noise_prob, window_size).reshape(window_size, 1)
+        x_train[i * window_size:(i + 1) * window_size, :] += act * np.random.normal(0, args.noise_stddev, window_size * 42).reshape(window_size, 42)
 y_train = all_data[:nb_sequences*window_size, 42:64]
 noise_train = all_data[:nb_sequences*window_size, 64:86]
 vad_train = all_data[:nb_sequences*window_size, 86:87]
