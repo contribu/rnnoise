@@ -284,7 +284,7 @@ elif args.arch == 'cnn2':
 else:
     raise 'unknown arch'
 
-optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-4, amsgrad=True)
+optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
 
 model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
