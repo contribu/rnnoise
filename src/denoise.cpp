@@ -102,6 +102,7 @@ struct DenoiseState {
   RNNState rnn;
   CommonState common;
     void *tensorflow_model;
+    float past_features[128 * 42];
 };
 
 #if SMOOTH_BANDS
@@ -251,12 +252,15 @@ static void init_ipp(CommonState *common) {
     const auto &dft = MyIppR2CDft32::GetDefaultSizeInstance();
     common->ipp_dft_work = ippsMalloc_8u(dft.work_buffer_size());
 }
+extern "C" {
+#endif
 
+}
 #include <fstream>
 #include <vector>
 #include <stdexcept>
 #include "tensorflow_model.h"
-void *create_tensormodel() {
+static void *create_tensormodel() {
     std::ifstream ifs("testmodel.pb", std::ios::binary | std::ios::ate);
     std::streamsize size = ifs.tellg();
     ifs.seekg(0, std::ios::beg);
@@ -265,10 +269,10 @@ void *create_tensormodel() {
     return new rnnoise::TensorflowModel(buffer.data(), buffer.size());
 }
 
-void free_tensormodel(void *model) {
+static void free_tensormodel(void *model) {
     delete (rnnoise::TensorflowModel *)model;
 }
-void compute_rnn_tensorflow(DenoiseState *st, float *gain_ptr, float *vad_ptr, const float *input_ptr) {
+static void compute_rnn_tensorflow(DenoiseState *st, float *gain_ptr, float *vad_ptr, const float *input_ptr) {
     const int window_size = 128;
     rnnoise::TensorflowModel::Input input;
     input.data = input_ptr;
@@ -293,8 +297,7 @@ void compute_rnn_tensorflow(DenoiseState *st, float *gain_ptr, float *vad_ptr, c
     model->Predict(&input, 1, outputs.data(), 2);
 }
 
-extern "C" {
-#endif
+    extern "C" {
 
 static void check_init(CommonState *common) {
   int i;
@@ -640,8 +643,22 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in, int p
   silence = compute_frame_features(st, X, P, Ex, Ep, Exp, features, x);
 
   if (!silence) {
-#if 0
-      compute_rnn_tensorflow(st, g, &vad_prob, features);
+#if 1
+      for (int i = 0; i < 127; i++) {
+          for (int j = 0; j < 42; j++) {
+              st->past_features[42 * i + j] = st->past_features[42 * (i + 1) + j];
+          }
+      }
+      for (int j = 0; j < 42; j++) {
+          st->past_features[42 * 127 + j] = features[j];
+      }
+      float transposed[128 * 42];
+      for (int i = 0; i < 128; i++) {
+          for (int j = 0; j < 42; j++) {
+              transposed[128 * j + i] = st->past_features[42 * i + j];
+          }
+      }
+      compute_rnn_tensorflow(st, g, &vad_prob, transposed);
 #else
     compute_rnn(&st->rnn, g, &vad_prob, features);
 #endif

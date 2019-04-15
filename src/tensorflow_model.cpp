@@ -87,11 +87,13 @@ namespace rnnoise {
             input_tensors.push_back(input_tensor);
         }
         
+#if 0
         size_t pos = 0;
         TF_Operation* oper;
         while ((oper = TF_GraphNextOperation((TF_Graph *)graph_, &pos)) != nullptr) {
             std::cout << "Input: " << TF_OperationName(oper) << "\n";
         }
+#endif
     
         std::vector<TF_Output> output_outputs;
         std::vector<TF_Tensor*> output_tensors;
