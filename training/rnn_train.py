@@ -37,6 +37,8 @@ from keras.constraints import Constraint
 from keras import backend as K
 import numpy as np
 
+from tcn import TCN
+
 # import mixup_generator from .py
 # mixup_generator = importlib.machinery.SourceFileLoader('mixup_generator', os.path.join(os.path.dirname(__file__), '../deps/mixup-generator/mixup_generator.py')).load_module()
 
@@ -284,26 +286,34 @@ elif args.arch == 'cnn2':
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
     denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
-elif args.arch == 'cnn3':
-    # cnnをベースにパフォーマンスを考慮したもの
-    main_input = Input(shape=(window_size, 42), name='main_input')
-    input_dropout = Dropout(args.input_dropout)(main_input)
-    reshaped = Reshape((window_size, 42, 1))(input_dropout)
+elif args.arch == 'original_tcn':
+    # originalをtcnに置き換えたもの
+    main_input = Input(shape=(None, 42), name='main_input')
 
-    conv1 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), reshaped)
-    conv1 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv1)
-    conv2 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv1)
-    conv2 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv2)
-    conv3 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv2)
-    conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
-    conv4 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv3)
-    conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
-    conv5 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv4)
-    conv5 = keras.layers.AveragePooling2D(pool_size=(window_size // 16, 1), strides=None, padding='valid')(conv5)
+    tmp = Dense(math.ceil(24 * args.hidden_units), activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
+    if args.dropout > 0:
+        tmp = Dropout(args.dropout)(tmp)
 
-    flatten = Flatten()(conv5);
-    vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
-    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
+    vad_gru = TCN(math.ceil(24 * args.hidden_units), name='vad_gru', return_sequences=True)(tmp)
+    if args.dropout > 0:
+        vad_gru = Dropout(args.dropout)(vad_gru)
+    # vad_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="vad_gru_activation")(GRU(24, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='vad_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(tmp))
+    vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(vad_gru)
+
+    noise_input = keras.layers.concatenate([tmp, vad_gru, main_input])
+    noise_gru = TCN(math.ceil(48 * args.hidden_units), name='noise_gru', return_sequences=True)(noise_input)
+    if args.dropout > 0:
+        noise_gru = Dropout(args.dropout)(noise_gru)
+    # noise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="noise_gru_activation")(GRU(48, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='noise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(noise_input))
+
+    denoise_input = keras.layers.concatenate([vad_gru, noise_gru, main_input])
+    denoise_gru = TCN(math.ceil(96 * args.hidden_units), name='denoise_gru', return_sequences=True)(denoise_input)
+    if args.dropout > 0:
+        denoise_gru = Dropout(args.dropout)(denoise_gru)
+    # denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
+
+    denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
+
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 else:
     raise 'unknown arch'
@@ -345,7 +355,7 @@ def window(ar, features):
     st = (ar.strides[0], ar.strides[0], ar.strides[1])
     return np.lib.stride_tricks.as_strided(ar, strides = st, shape = (nb_sequences*window_size - window_size + 1, window_size, features))
 
-if args.arch == 'original':
+if args.arch == 'original' or args.arch == 'original_tcn':
     x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
     y_train = np.reshape(y_train, (nb_sequences, window_size, 22))
     noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))

@@ -12,6 +12,7 @@ h5py = "*"
 tensorflow = "*"
 sklearn = "*"
 pydot = "*"
+keras-tcn = "*"
 
 [requires]
 python_version = "3.6"
