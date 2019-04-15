@@ -195,7 +195,8 @@ def double_cnn_block(unit, conv_shape, input):
     x = Conv2D(unit, conv_shape, padding='same', use_bias=False)(x)
     x = keras.layers.normalization.BatchNormalization()(x)
     x = keras.layers.Activation('elu')(x)
-    x = Dropout(args.dropout)(x)
+    if args.dropout > 0:
+        x = Dropout(args.dropout)(x)
     x = Conv2D(unit, conv_shape, padding='same', use_bias=False)(x)
     return x
 
@@ -209,6 +210,27 @@ def res_block2(unit, conv_shape1, conv_shape2, input):
     x2 = double_cnn_block(unit // 2, conv_shape2, input)
     x = keras.layers.concatenate([x1, x2])
     x = keras.layers.Add()([x, input])
+    return x
+
+def tcn_res_block(unit, kernel_size, dilation_rate, input):
+    x = input
+    x = keras.layers.normalization.BatchNormalization()(x)
+    x = keras.layers.Activation('elu')(x)
+    x = keras.layers.Conv1D(unit, kernel_size, dilation_rate=dilation_rate, padding='causal', use_bias=False)(x)
+    x = keras.layers.normalization.BatchNormalization()(x)
+    x = keras.layers.Activation('elu')(x)
+    if args.dropout > 0:
+        x = Dropout(args.dropout)(x)
+    x = keras.layers.Conv1D(unit, kernel_size, dilation_rate=dilation_rate, padding='causal', use_bias=False)(x)
+    if input.shape[-1] != unit:
+        input = Dense(unit)(input)
+    x = keras.layers.Add()([x, input])
+    return x
+
+def tcn_res_blocks(unit, kernel_size, dilation_rates, input):
+    x = input
+    for dilation_rate in dilation_rates:
+        x = tcn_res_block(unit, kernel_size, dilation_rate, x)
     return x
 
 if args.arch == 'original':
@@ -289,31 +311,49 @@ elif args.arch == 'cnn2':
 elif args.arch == 'original_tcn':
     # originalをtcnに置き換えたもの
     main_input = Input(shape=(None, 42), name='main_input')
+    dilations = [1, 2, 4, 8, 16, 32]
 
     tmp = Dense(math.ceil(24 * args.hidden_units), activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
     if args.dropout > 0:
         tmp = Dropout(args.dropout)(tmp)
 
-    vad_gru = TCN(math.ceil(24 * args.hidden_units), name='vad_gru', return_sequences=True)(tmp)
+    vad_gru = TCN(math.ceil(24 * args.hidden_units), name='vad_gru', dilations=dilations, return_sequences=True)(tmp)
     if args.dropout > 0:
         vad_gru = Dropout(args.dropout)(vad_gru)
     # vad_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="vad_gru_activation")(GRU(24, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='vad_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(tmp))
     vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(vad_gru)
 
     noise_input = keras.layers.concatenate([tmp, vad_gru, main_input])
-    noise_gru = TCN(math.ceil(48 * args.hidden_units), name='noise_gru', return_sequences=True)(noise_input)
+    noise_gru = TCN(math.ceil(48 * args.hidden_units), name='noise_gru', dilations=dilations, return_sequences=True)(noise_input)
     if args.dropout > 0:
         noise_gru = Dropout(args.dropout)(noise_gru)
     # noise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="noise_gru_activation")(GRU(48, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='noise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(noise_input))
 
     denoise_input = keras.layers.concatenate([vad_gru, noise_gru, main_input])
-    denoise_gru = TCN(math.ceil(96 * args.hidden_units), name='denoise_gru', return_sequences=True)(denoise_input)
+    denoise_gru = TCN(math.ceil(96 * args.hidden_units), name='denoise_gru', dilations=dilations, return_sequences=True)(denoise_input)
     if args.dropout > 0:
         denoise_gru = Dropout(args.dropout)(denoise_gru)
     # denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
 
     denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
 
+    model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
+elif args.arch == 'tcn':
+    # 自前でresnetのcnnみたいにtcnを積み上げたもの
+    main_input = Input(shape=(None, 42), name='main_input')
+    x = main_input
+    if args.input_dropout > 0:
+        x = Dropout(args.input_dropout)(x)
+    dilations = [1, 2, 4, 8, 16, 32]
+
+    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
+    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
+    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
+    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
+    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
+
+    vad_output = Dense(1, activation='sigmoid', name='vad_output')(x)
+    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(x)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 else:
     raise 'unknown arch'
@@ -355,7 +395,7 @@ def window(ar, features):
     st = (ar.strides[0], ar.strides[0], ar.strides[1])
     return np.lib.stride_tricks.as_strided(ar, strides = st, shape = (nb_sequences*window_size - window_size + 1, window_size, features))
 
-if args.arch == 'original' or args.arch == 'original_tcn':
+if args.arch == 'original' or args.arch == 'original_tcn' or args.arch == 'tcn':
     x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
     y_train = np.reshape(y_train, (nb_sequences, window_size, 22))
     noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
