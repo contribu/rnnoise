@@ -54,6 +54,6 @@ target_compile_definitions(denoise_training PRIVATE TRAINING=1 RNNOISE_FLOAT_WEI
 target_link_libraries(denoise_training gflags ${COMMON_LIBS})
 
 file(GLOB TEST_SOURCES test/*)
-add_executable(test ${RNNOISE_SOURCES} ${TEST_SOURCES})
-target_compile_definitions(test PRIVATE TRAINING=0 RNNOISE_FLOAT_WEIGHT RNNOISE_IPP)
-target_link_libraries(test gtest gtest_main ${COMMON_LIBS})
+add_executable(mytest ${RNNOISE_SOURCES} ${TEST_SOURCES})
+target_compile_definitions(mytest PRIVATE TRAINING=0 RNNOISE_FLOAT_WEIGHT RNNOISE_IPP)
+target_link_libraries(mytest gtest gtest_main ${COMMON_LIBS})
