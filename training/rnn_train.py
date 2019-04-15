@@ -66,6 +66,7 @@ parser.add_argument('--loss_type', default='original')
 parser.add_argument('--log_loss_bias', type=float, default='1e-7')
 parser.add_argument('--arch', default='original')
 parser.add_argument('--window_size', type=int, default=2000)
+parser.add_argument('--window_overlap', type=int, default=0)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -256,29 +257,25 @@ elif args.arch == 'cnn':
     conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
     conv5 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv4)
     conv5 = keras.layers.AveragePooling2D(pool_size=(window_size // 16, 1), strides=None, padding='valid')(conv5)
-    # conv6 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv5)
-    # conv6 = keras.layers.AveragePooling2D(pool_size=(window_size // 32, 1), strides=None, padding='valid')(conv6)
 
-    # conv_hori2 = res_block(int(8 * args.hidden_units), (window_size, 1), conv1)
-    # conv_vert2 = res_block(int(8 * args.hidden_units), (1, 42), conv1)
-    # conv2 = keras.layers.concatenate([conv_hori2, conv_vert2])
-    #
-    # conv3 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv2)
-    # conv3 = keras.layers.normalization.BatchNormalization()(conv3)
-    # conv3 = keras.layers.Activation('elu')(conv3)
-    # conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
-    #
-    # conv4 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv3)
-    # conv4 = keras.layers.normalization.BatchNormalization()(conv4)
-    # conv4 = keras.layers.Activation('elu')(conv4)
-    # conv4 = keras.layers.Add()([conv3, conv4])
-    # conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
-    #
-    # conv5 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv4)
-    # conv5 = keras.layers.normalization.BatchNormalization()(conv5)
-    # conv5 = keras.layers.Activation('elu')(conv5)
-    # conv5 = keras.layers.Add()([conv4, conv5])
-    # conv5 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
+    flatten = Flatten()(conv5);
+    vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
+    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
+    model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
+elif args.arch == 'cnn2':
+    # 初期バージョンに近い形だが、小さいデータで試したらcnnより成績悪い
+    main_input = Input(shape=(window_size, 42), name='main_input')
+    input_dropout = Dropout(args.input_dropout)(main_input)
+    reshaped = Reshape((window_size, 42, 1))(input_dropout)
+
+    conv1 = res_block2(int(16 * args.hidden_units), (3, 3), (3, 3), reshaped)
+    conv2 = res_block2(int(16 * args.hidden_units), (1, 42), (window_size, 1), conv1)
+    conv3 = res_block2(int(16 * args.hidden_units), (3, 42), (41, 3), conv2)
+    conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
+    conv4 = res_block2(int(16 * args.hidden_units), (3, 42), (41, 3), conv3)
+    conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
+    conv5 = res_block2(int(16 * args.hidden_units), (3, 42), (41, 3), conv4)
+    conv5 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
 
     flatten = Flatten()(conv5);
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
@@ -316,16 +313,24 @@ y_train = all_data[:nb_sequences*window_size, 42:64]
 noise_train = all_data[:nb_sequences*window_size, 64:86]
 vad_train = all_data[:nb_sequences*window_size, 86:87]
 
+def window(ar, features):
+    st = (ar.strides[0], ar.strides[0], ar.strides[1])
+    return np.lib.stride_tricks.as_strided(ar, strides = st, shape = (nb_sequences*window_size - window_size + 1, window_size, features))
+
 if args.arch == 'original':
     x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
     y_train = np.reshape(y_train, (nb_sequences, window_size, 22))
     noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
     vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))
-elif args.arch == 'cnn':
-    x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
-    y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
-    noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
-    vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size - 1,:]
+elif args.arch == 'cnn' or args.arch == 'cnn2':
+    if args.window_overlap > 0:
+        x_train = window(x_train, 42)[::args.window_overlap,:,:]
+        y_train = window(y_train, 22)[::args.window_overlap,window_size - 1,:]
+        vad_train = window(vad_train, 1)[::args.window_overlap,window_size - 1,:]
+    else:
+        x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
+        y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
+        vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size - 1,:]
 else:
     raise 'unknown arch'
 
