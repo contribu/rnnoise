@@ -80,7 +80,7 @@ namespace rnnoise {
             TF_Output input_output = {input_op, 0};
             input_outputs.push_back(input_output);
             
-            TF_Tensor *input_tensor = TF_NewTensor(TF_FLOAT, inputs[i].dims.data(), inputs[i].dims.size(), (void *)inputs[i].data, inputs[i].size(), dealloc_tensor_null, nullptr);
+            TF_Tensor *input_tensor = TF_NewTensor(TF_FLOAT, inputs[i].dims.data(), inputs[i].dims.size(), (void *)inputs[i].data, 4 * inputs[i].size(), dealloc_tensor_null, nullptr);
             if (!input_tensor) {
                 throw_tf_exception("TF_NewTensor failed", nullptr);
             }
