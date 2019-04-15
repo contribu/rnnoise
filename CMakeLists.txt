@@ -43,20 +43,17 @@ set(COMMON_LIBS
 )
 endif()
 
-add_compile_definitions(RNNOISE_FLOAT_WEIGHT)
-add_compile_definitions(RNNOISE_IPP)
-
 file(GLOB RNNOISE_SOURCES src/*)
 
 add_executable(rnnoise_demo ${RNNOISE_SOURCES} examples/rnnoise_demo.c)
-target_compile_definitions(rnnoise_demo PRIVATE TRAINING=0)
+target_compile_definitions(rnnoise_demo PRIVATE TRAINING=0 RNNOISE_FLOAT_WEIGHT RNNOISE_IPP)
 target_link_libraries(rnnoise_demo ${COMMON_LIBS})
 
 add_executable(denoise_training ${RNNOISE_SOURCES})
-target_compile_definitions(denoise_training PRIVATE TRAINING=1)
+target_compile_definitions(denoise_training PRIVATE TRAINING=1 RNNOISE_FLOAT_WEIGHT RNNOISE_IPP)
 target_link_libraries(denoise_training gflags ${COMMON_LIBS})
 
 file(GLOB TEST_SOURCES test/*)
 add_executable(test ${RNNOISE_SOURCES} ${TEST_SOURCES})
-target_compile_definitions(test PRIVATE TRAINING=0)
+target_compile_definitions(test PRIVATE TRAINING=0 RNNOISE_FLOAT_WEIGHT RNNOISE_IPP)
 target_link_libraries(test gtest gtest_main ${COMMON_LIBS})
