@@ -764,11 +764,11 @@ int main(int argc, char **argv) {
         float E=0;
         if (count==FLAGS_output_count) break;
         if (++gain_change_count > 2821) {
-            speech_gain = pow(10., (-40+(rand()%60))/20.);
+            speech_gain = pow(10., (-60+(rand()%100))/20.);
             noise_gain = pow(10., (-30+(rand()%50))/20.);
-            if (rand()%10==0) noise_gain = 0;
+            if (rand()%3==0) noise_gain = 0;
             noise_gain *= speech_gain;
-            if (rand()%10==0) speech_gain = 0;
+            if (rand()%3==0) speech_gain = 0;
             gain_change_count = 0;
             rand_resp(a_noise, b_noise);
             rand_resp(a_sig, b_sig);
@@ -832,9 +832,9 @@ int main(int argc, char **argv) {
         for (i=0;i<NB_BANDS;i++) {
             g[i] = sqrt((Ey[i]+1e-3)/(Ex[i]+1e-3));
             if (g[i] > 1) g[i] = 1;
-            if (silence || i > band_lp) g[i] = -1;
-            if (Ey[i] < 5e-2 && Ex[i] < 5e-2) g[i] = -1;
-            if (vad==0 && noise_gain==0) g[i] = -1;
+            // if (silence || i > band_lp) g[i] = -1;
+            // if (Ey[i] < 5e-2 && Ex[i] < 5e-2) g[i] = -1;
+            // if (vad==0 && noise_gain==0) g[i] = -1;
         }
         count++;
         if (count % 1000 == 0)
