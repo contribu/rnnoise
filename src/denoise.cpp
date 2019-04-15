@@ -101,6 +101,7 @@ struct DenoiseState {
   float lastg[NB_BANDS];
   RNNState rnn;
   CommonState common;
+    void *tensorflow_model;
 };
 
 #if SMOOTH_BANDS
@@ -251,6 +252,47 @@ static void init_ipp(CommonState *common) {
     common->ipp_dft_work = ippsMalloc_8u(dft.work_buffer_size());
 }
 
+#include <fstream>
+#include <vector>
+#include <stdexcept>
+#include "tensorflow_model.h"
+void *create_tensormodel() {
+    std::ifstream ifs("testmodel.pb", std::ios::binary | std::ios::ate);
+    std::streamsize size = ifs.tellg();
+    ifs.seekg(0, std::ios::beg);
+    std::vector<char> buffer(size);
+    if (!ifs.read(buffer.data(), size)) throw std::logic_error("failed to load testmodel.pb");
+    return new rnnoise::TensorflowModel(buffer.data(), buffer.size());
+}
+
+void free_tensormodel(void *model) {
+    delete (rnnoise::TensorflowModel *)model;
+}
+void compute_rnn_tensorflow(DenoiseState *st, float *gain_ptr, float *vad_ptr, const float *input_ptr) {
+    const int window_size = 128;
+    rnnoise::TensorflowModel::Input input;
+    input.data = input_ptr;
+    input.dims.push_back(0);
+    input.dims.push_back(window_size);
+    input.dims.push_back(42);
+    input.name = "main_input";
+    std::vector<rnnoise::TensorflowModel::Output> outputs;
+    {
+        rnnoise::TensorflowModel::Output output;
+        output.data = gain_ptr;
+        output.name = "denoise_output/Sigmoid";
+        outputs.push_back(output);
+    }
+    {
+        rnnoise::TensorflowModel::Output output;
+        output.data = vad_ptr;
+        output.name = "vad_output/Sigmoid";
+        outputs.push_back(output);
+    }
+    const auto model = (rnnoise::TensorflowModel *)st->tensorflow_model;
+    model->Predict(&input, 1, outputs.data(), 2);
+}
+
 extern "C" {
 #endif
 
@@ -391,6 +433,7 @@ int rnnoise_get_size() {
 
 int rnnoise_init(DenoiseState *st) {
   memset(st, 0, sizeof(*st));
+    st->tensorflow_model = create_tensormodel();
   return 0;
 }
 
@@ -407,6 +450,7 @@ void rnnoise_destroy(DenoiseState *st) {
         ippsFree(st->common.ipp_dft_work);
     }
 #endif
+    free_tensormodel(st->tensorflow_model);
   free(st);
 }
 
@@ -596,7 +640,11 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in, int p
   silence = compute_frame_features(st, X, P, Ex, Ep, Exp, features, x);
 
   if (!silence) {
+#if 0
+      compute_rnn_tensorflow(st, g, &vad_prob, features);
+#else
     compute_rnn(&st->rnn, g, &vad_prob, features);
+#endif
     if (pitch_filter_enabled) {
       pitch_filter(X, P, Ex, Ep, Exp, g);
     }
