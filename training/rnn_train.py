@@ -54,6 +54,7 @@ parser.add_argument('--data', default='denoise_data9.h5')
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--reg', type=float, default=0.000001)
 parser.add_argument('--dropout', type=float, default=0.0)
+parser.add_argument('--input_dropout', type=float, default=0.0)
 parser.add_argument('--hidden_units', type=float, default=1.0)
 parser.add_argument('--cudnngru', action='store_true')
 parser.add_argument('--mmap', action='store_true')
@@ -180,6 +181,30 @@ print(args)
 
 window_size = args.window_size
 
+# https://deepage.net/deep_learning/2016/11/30/resnet.html
+def double_cnn_block(unit, conv_shape, input):
+    x = input
+    x = keras.layers.normalization.BatchNormalization()(x)
+    x = keras.layers.Activation('elu')(x)
+    x = Conv2D(unit, conv_shape, padding='same', use_bias=False)(x)
+    x = keras.layers.normalization.BatchNormalization()(x)
+    x = keras.layers.Activation('elu')(x)
+    x = Dropout(args.dropout)(x)
+    x = Conv2D(unit, conv_shape, padding='same', use_bias=False)(x)
+    return x
+
+def res_block(unit, conv_shape, input):
+    x = double_cnn_block(unit, conv_shape, input)
+    x = keras.layers.Add()([x, input])
+    return x
+
+def res_block2(unit, conv_shape1, conv_shape2, input):
+    x1 = double_cnn_block(unit // 2, conv_shape1, input)
+    x2 = double_cnn_block(unit // 2, conv_shape2, input)
+    x = keras.layers.concatenate([x1, x2])
+    x = keras.layers.Add()([x, input])
+    return x
+
 if args.arch == 'original':
     main_input = Input(shape=(None, 42), name='main_input')
 
@@ -210,35 +235,39 @@ if args.arch == 'original':
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'cnn':
     main_input = Input(shape=(window_size, 42), name='main_input')
-    reshaped = Reshape((window_size, 42, 1))(main_input)
-    conv1 = Conv2D(int(16 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(reshaped)
-    conv1 = keras.layers.normalization.BatchNormalization()(conv1)
-    conv1 = keras.layers.Activation('elu')(conv1)
+    input_dropout = Dropout(args.input_dropout)(main_input)
+    reshaped = Reshape((window_size, 42, 1))(input_dropout)
+    # conv1 = Conv2D(int(16 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(reshaped)
+    # conv1 = keras.layers.normalization.BatchNormalization()(conv1)
+    # conv1 = keras.layers.Activation('elu')(conv1)
 
-    conv_hori2 = Conv2D(int(8 * args.hidden_units), (window_size, 1), dilation_rate=(1, 1), padding='same', use_bias=False)(conv1)
-    conv_hori2 = keras.layers.normalization.BatchNormalization()(conv_hori2)
-    conv_hori2 = keras.layers.Activation('elu')(conv_hori2)
-    conv_vert2 = Conv2D(int(8 * args.hidden_units), (1, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv1)
-    conv_vert2 = keras.layers.normalization.BatchNormalization()(conv_vert2)
-    conv_vert2 = keras.layers.Activation('elu')(conv_vert2)
-    conv2 = keras.layers.concatenate([conv_hori2, conv_vert2])
+    conv1 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), reshaped)
+    conv2 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv1)
+    conv3 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv2)
+    conv4 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv3)
+    conv5 = res_block2(int(16 * args.hidden_units), (3, 42), (window_size, 1), conv4)
+    conv5 = keras.layers.AveragePooling2D(pool_size=(window_size // 1, 1), strides=None, padding='valid')(conv5)
 
-    conv3 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv2)
-    conv3 = keras.layers.normalization.BatchNormalization()(conv3)
-    conv3 = keras.layers.Activation('elu')(conv3)
-    conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
-
-    conv4 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv3)
-    conv4 = keras.layers.normalization.BatchNormalization()(conv4)
-    conv4 = keras.layers.Activation('elu')(conv4)
-    conv4 = keras.layers.Add()([conv3, conv4])
-    conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
-
-    conv5 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv4)
-    conv5 = keras.layers.normalization.BatchNormalization()(conv5)
-    conv5 = keras.layers.Activation('elu')(conv5)
-    conv5 = keras.layers.Add()([conv4, conv5])
-    conv5 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
+    # conv_hori2 = res_block(int(8 * args.hidden_units), (window_size, 1), conv1)
+    # conv_vert2 = res_block(int(8 * args.hidden_units), (1, 42), conv1)
+    # conv2 = keras.layers.concatenate([conv_hori2, conv_vert2])
+    #
+    # conv3 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv2)
+    # conv3 = keras.layers.normalization.BatchNormalization()(conv3)
+    # conv3 = keras.layers.Activation('elu')(conv3)
+    # conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
+    #
+    # conv4 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv3)
+    # conv4 = keras.layers.normalization.BatchNormalization()(conv4)
+    # conv4 = keras.layers.Activation('elu')(conv4)
+    # conv4 = keras.layers.Add()([conv3, conv4])
+    # conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
+    #
+    # conv5 = Conv2D(int(16 * args.hidden_units), (3, 42), dilation_rate=(1, 1), padding='same', use_bias=False)(conv4)
+    # conv5 = keras.layers.normalization.BatchNormalization()(conv5)
+    # conv5 = keras.layers.Activation('elu')(conv5)
+    # conv5 = keras.layers.Add()([conv4, conv5])
+    # conv5 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
 
     flatten = Flatten()(conv5);
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
@@ -252,6 +281,9 @@ optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.99
 model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
               optimizer=optimizer, loss_weights=[10, 0.5])
+
+print('count_params {}'.format(model.count_params()))
+print(model.summary())
 
 batch_size = args.batch_size
 
