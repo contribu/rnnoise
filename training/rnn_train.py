@@ -335,7 +335,7 @@ print(nb_sequences, ' sequences')
 x_train = all_data[:nb_sequences*window_size, :42]
 if args.noise_prob > 0:
     for i in range(nb_sequences):
-        act = np.random.binomial(1, args.noise_prob, window_size).reshape(window_size, 1)
+        act = np.random.binomial(1, args.noise_prob, window_size // 100).repeat(100).reshape(window_size, 1)
         x_train[i * window_size:(i + 1) * window_size, :] += act * np.random.normal(0, args.noise_stddev, window_size * 42).reshape(window_size, 42)
 y_train = all_data[:nb_sequences*window_size, 42:64]
 noise_train = all_data[:nb_sequences*window_size, 64:86]
