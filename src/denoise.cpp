@@ -763,7 +763,7 @@ int main(int argc, char **argv) {
         float vad_prob;
         float E=0;
         if (count==FLAGS_output_count) break;
-        if (++gain_change_count > 2821) {
+        if (++gain_change_count > 283) {
             speech_gain = pow(10., (-60+(rand()%100))/20.);
             noise_gain = pow(10., (-30+(rand()%50))/20.);
             if (rand()%3==0) noise_gain = 0;
