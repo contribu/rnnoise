@@ -71,6 +71,7 @@ parser.add_argument('--window_size', type=int, default=2000)
 parser.add_argument('--window_overlap', type=int, default=0)
 parser.add_argument('--noise_prob', type=float, default=0.0)
 parser.add_argument('--noise_stddev', type=float, default=10.0)
+parser.add_argument('--tcn_layers', type=int, default=3)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -346,11 +347,8 @@ elif args.arch == 'tcn':
         x = Dropout(args.input_dropout)(x)
     dilations = [1, 2, 4, 8, 16, 32]
 
-    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
-    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
-    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
-    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
-    x = tcn_res_blocks(int(16 * args.hidden_units), 2, dilations, x)
+    for i in range(args.tcn_layers):
+        x = tcn_res_blocks(int(16 * args.hidden_units), 3, dilations, x)
 
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(x)
     denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(x)
