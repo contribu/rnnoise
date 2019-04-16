@@ -220,6 +220,12 @@ class MyCLI < Thor
 
       # check test data (only 60sec)
       ffmpeg -f s16le -ac 1 -ar 48000 -i clean.raw -t 60 /tmp/preview.ogg
+
+      # tensorboard
+      pipenv run tensorboard --logdir ./tflogs
+
+      # tensorboard over ssh
+      ssh -L 6006:localhost:6006 user@host
     EOS
   end
 end

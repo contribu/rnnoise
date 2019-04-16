@@ -462,7 +462,8 @@ all_data = 0
 print(len(x_train), 'train sequences. x shape =', x_train.shape, 'y shape = ', y_train.shape)
 
 print('Train...')
-dir = datetime.datetime.now().strftime("train%Y%m%d_%H%M%S")
+train_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+dir = "train{}".format(train_id)
 os.makedirs(os.path.join(dir), exist_ok=True)
 
 # plot_model(model, to_file=dir + "/model.png")
@@ -484,12 +485,14 @@ modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, '
                                                   mode='min',
                                                   period=1)
 
+tensor_board = keras.callbacks.TensorBoard(log_dir='./tflogs/train{}'.format(train_id), histogram_freq=1, batch_size=batch_size, write_graph=True, write_grads=False, write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None)
+
 if args.mixup == 0:
     compiled_model.fit(x_train, [y_train, vad_train],
               batch_size=batch_size,
               epochs=120,
               validation_split=0.1,
-              callbacks=[modelCheckpoint, keras.callbacks.ReduceLROnPlateau()])
+              callbacks=[modelCheckpoint, keras.callbacks.ReduceLROnPlateau(), tensor_board])
 else:
     x_train_train, x_val, y_train_train, y_val, vad_train_train, vad_val = train_test_split(x_train, y_train, vad_train, test_size=0.1, shuffle=True, random_state=1)
 
