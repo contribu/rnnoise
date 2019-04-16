@@ -73,6 +73,7 @@ parser.add_argument('--noise_prob', type=float, default=0.0)
 parser.add_argument('--noise_stddev', type=float, default=10.0)
 parser.add_argument('--tcn_layers', type=int, default=3)
 parser.add_argument('--tcn_dilation_order', type=int, default=5)
+parser.add_argument('--bands', type=int, default=22)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -187,6 +188,7 @@ print(args)
 # gru_lrelu_alpha = 1.0 / 5.5 # from "Empirical Evaluation of Rectified Activations in Convolution Network"
 
 window_size = args.window_size
+feature_count = args.bands + 20
 
 # https://deepage.net/deep_learning/2016/11/30/resnet.html
 def double_cnn_block(unit, conv_shape, input):
@@ -236,7 +238,7 @@ def tcn_res_blocks(unit, kernel_size, dilation_rates, input):
     return x
 
 if args.arch == 'original':
-    main_input = Input(shape=(None, 42), name='main_input')
+    main_input = Input(shape=(None, feature_count), name='main_input')
 
     tmp = Dense(math.ceil(24 * args.hidden_units), activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
     if args.dropout > 0:
@@ -260,13 +262,13 @@ if args.arch == 'original':
         denoise_gru = Dropout(args.dropout)(denoise_gru)
     # denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
 
-    denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
+    denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
 
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'cnn':
-    main_input = Input(shape=(window_size, 42), name='main_input')
+    main_input = Input(shape=(window_size, feature_count), name='main_input')
     input_dropout = Dropout(args.input_dropout)(main_input)
-    reshaped = Reshape((window_size, 42, 1))(input_dropout)
+    reshaped = Reshape((window_size, feature_count, 1))(input_dropout)
     # conv1 = Conv2D(int(16 * args.hidden_units), (3, 3), dilation_rate=(1, 1), padding='same', use_bias=False)(reshaped)
     # conv1 = keras.layers.normalization.BatchNormalization()(conv1)
     # conv1 = keras.layers.Activation('elu')(conv1)
@@ -276,43 +278,43 @@ elif args.arch == 'cnn':
     # http://www.jordipons.me/media/UPC-2018.pdf とも整合している
     # res_block2の数は、4 < 5 = 6らしい
 
-    conv1 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), reshaped)
+    conv1 = res_block2(int(16 * args.hidden_units), (1, feature_count), (13, 3), reshaped)
     conv1 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv1)
-    conv2 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv1)
+    conv2 = res_block2(int(16 * args.hidden_units), (1, feature_count), (13, 3), conv1)
     conv2 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv2)
-    conv3 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv2)
+    conv3 = res_block2(int(16 * args.hidden_units), (1, feature_count), (13, 3), conv2)
     conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
-    conv4 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv3)
+    conv4 = res_block2(int(16 * args.hidden_units), (1, feature_count), (13, 3), conv3)
     conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
-    conv5 = res_block2(int(16 * args.hidden_units), (1, 42), (13, 3), conv4)
+    conv5 = res_block2(int(16 * args.hidden_units), (1, feature_count), (13, 3), conv4)
     conv5 = keras.layers.AveragePooling2D(pool_size=(window_size // 16, 1), strides=None, padding='valid')(conv5)
 
     flatten = Flatten()(conv5);
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
-    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
+    denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output')(flatten)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'cnn2':
     # 初期バージョンに近い形だが、小さいデータで試したらcnnより成績悪い
-    main_input = Input(shape=(window_size, 42), name='main_input')
+    main_input = Input(shape=(window_size, feature_count), name='main_input')
     input_dropout = Dropout(args.input_dropout)(main_input)
-    reshaped = Reshape((window_size, 42, 1))(input_dropout)
+    reshaped = Reshape((window_size, feature_count, 1))(input_dropout)
 
     conv1 = res_block2(int(16 * args.hidden_units), (3, 3), (3, 3), reshaped)
-    conv2 = res_block2(int(16 * args.hidden_units), (1, 42), (window_size, 1), conv1)
-    conv3 = res_block2(int(16 * args.hidden_units), (3, 42), (41, 3), conv2)
+    conv2 = res_block2(int(16 * args.hidden_units), (1, feature_count), (window_size, 1), conv1)
+    conv3 = res_block2(int(16 * args.hidden_units), (3, feature_count), (41, 3), conv2)
     conv3 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv3)
-    conv4 = res_block2(int(16 * args.hidden_units), (3, 42), (41, 3), conv3)
+    conv4 = res_block2(int(16 * args.hidden_units), (3, feature_count), (41, 3), conv3)
     conv4 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv4)
-    conv5 = res_block2(int(16 * args.hidden_units), (3, 42), (41, 3), conv4)
+    conv5 = res_block2(int(16 * args.hidden_units), (3, feature_count), (41, 3), conv4)
     conv5 = keras.layers.AveragePooling2D(pool_size=(2, 1), strides=None, padding='valid')(conv5)
 
     flatten = Flatten()(conv5);
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
-    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(flatten)
+    denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output')(flatten)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'original_tcn':
     # originalをtcnに置き換えたもの
-    main_input = Input(shape=(None, 42), name='main_input')
+    main_input = Input(shape=(None, feature_count), name='main_input')
     dilations = [1, 2, 4, 8, 16, 32]
 
     tmp = Dense(math.ceil(24 * args.hidden_units), activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
@@ -337,12 +339,12 @@ elif args.arch == 'original_tcn':
         denoise_gru = Dropout(args.dropout)(denoise_gru)
     # denoise_gru = keras.layers.LeakyReLU(alpha=gru_lrelu_alpha, name="denoise_gru_activation")(GRU(96, activation=None, recurrent_activation='sigmoid', return_sequences=True, name='denoise_gru', kernel_regularizer=regularizers.l2(reg), recurrent_regularizer=regularizers.l2(reg), kernel_constraint=constraint, recurrent_constraint=constraint, bias_constraint=constraint)(denoise_input))
 
-    denoise_output = Dense(22, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
+    denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
 
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'tcn':
     # 自前でresnetのcnnみたいにtcnを積み上げたもの
-    main_input = Input(shape=(None, 42), name='main_input')
+    main_input = Input(shape=(None, feature_count), name='main_input')
     x = main_input
     if args.input_dropout > 0:
         x = Dropout(args.input_dropout)(x)
@@ -354,7 +356,7 @@ elif args.arch == 'tcn':
         x = tcn_res_blocks(int(16 * args.hidden_units), 3, dilations, x)
 
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(x)
-    denoise_output = Dense(22, activation='sigmoid', name='denoise_output')(x)
+    denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output')(x)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 else:
     raise 'unknown arch'
@@ -372,43 +374,43 @@ batch_size = args.batch_size
 
 if args.mmap:
     print('Mmap .f32 file')
-    all_data = np.memmap(args.data, dtype='float32', mode='r', shape=(os.path.getsize(args.data) // (4 * 87), 87));
+    all_data = np.memmap(args.data, dtype='float32', mode='r', shape=(os.path.getsize(args.data) // (4 * (feature_count + 2 * args.bands + 1)), feature_count + 2 * args.bands + 1));
 else:
     print('Loading data from .h5...')
     all_data = np.fromfile(args.data, dtype='float32');
-    all_data = np.reshape(all_data, (-1, 87));
+    all_data = np.reshape(all_data, (-1, feature_count + 2 * args.bands + 1));
     # with h5py.File(args.data, 'r') as hf:
     #     all_data = hf['data'][:]
     print('done.')
 
 nb_sequences = len(all_data)//window_size
 print(nb_sequences, ' sequences')
-x_train = all_data[:nb_sequences*window_size, :42]
+x_train = all_data[:nb_sequences*window_size, :feature_count]
 if args.noise_prob > 0:
     for i in range(nb_sequences):
         act = np.random.binomial(1, args.noise_prob, window_size // 100).repeat(100).reshape(window_size, 1)
-        x_train[i * window_size:(i + 1) * window_size, :] += act * np.random.normal(0, args.noise_stddev, window_size * 42).reshape(window_size, 42)
-y_train = all_data[:nb_sequences*window_size, 42:64]
-noise_train = all_data[:nb_sequences*window_size, 64:86]
-vad_train = all_data[:nb_sequences*window_size, 86:87]
+        x_train[i * window_size:(i + 1) * window_size, :] += act * np.random.normal(0, args.noise_stddev, window_size * feature_count).reshape(window_size, feature_count)
+y_train = all_data[:nb_sequences*window_size, feature_count:feature_count + args.bands]
+noise_train = all_data[:nb_sequences*window_size, feature_count + args.bands:feature_count + 2 * args.bands]
+vad_train = all_data[:nb_sequences*window_size, feature_count + 2 * args.bands:feature_count + 2 * args.bands + 1]
 
 def window(ar, features):
     st = (ar.strides[0], ar.strides[0], ar.strides[1])
     return np.lib.stride_tricks.as_strided(ar, strides = st, shape = (nb_sequences*window_size - window_size + 1, window_size, features))
 
 if args.arch == 'original' or args.arch == 'original_tcn' or args.arch == 'tcn':
-    x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
-    y_train = np.reshape(y_train, (nb_sequences, window_size, 22))
-    noise_train = np.reshape(noise_train, (nb_sequences, window_size, 22))
+    x_train = np.reshape(x_train, (nb_sequences, window_size, feature_count))
+    y_train = np.reshape(y_train, (nb_sequences, window_size, args.bands))
+    noise_train = np.reshape(noise_train, (nb_sequences, window_size, args.bands))
     vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))
 elif args.arch == 'cnn' or args.arch == 'cnn2':
     if args.window_overlap > 0:
-        x_train = window(x_train, 42)[::args.window_overlap,:,:]
-        y_train = window(y_train, 22)[::args.window_overlap,window_size - 1,:]
+        x_train = window(x_train, feature_count)[::args.window_overlap,:,:]
+        y_train = window(y_train, args.bands)[::args.window_overlap,window_size - 1,:]
         vad_train = window(vad_train, 1)[::args.window_overlap,window_size - 1,:]
     else:
-        x_train = np.reshape(x_train, (nb_sequences, window_size, 42))
-        y_train = np.reshape(y_train, (nb_sequences, window_size, 22))[:,window_size - 1,:]
+        x_train = np.reshape(x_train, (nb_sequences, window_size, feature_count))
+        y_train = np.reshape(y_train, (nb_sequences, window_size, args.bands))[:,window_size - 1,:]
         vad_train = np.reshape(vad_train, (nb_sequences, window_size, 1))[:,window_size - 1,:]
 else:
     raise 'unknown arch'

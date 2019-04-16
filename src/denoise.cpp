@@ -54,29 +54,62 @@ extern "C" {
 
 #define SQUARE(x) ((x)*(x))
 
-#define SMOOTH_BANDS 1
-
-#if SMOOTH_BANDS
-#define NB_BANDS 22
-#else
-#define NB_BANDS 21
-#endif
-
-#define CEPS_MEM 8
-#define NB_DELTA_CEPS 6
-
-#define NB_FEATURES (NB_BANDS+3*NB_DELTA_CEPS+2)
-
 
 #ifndef TRAINING
 #define TRAINING 0
 #endif
 
-static const opus_int16 eband5ms[] = {
-/*0  200 400 600 800  1k 1.2 1.4 1.6  2k 2.4 2.8 3.2  4k 4.8 5.6 6.8  8k 9.6 12k 15.6 20k*/
-  0,  1,  2,  3,  4,  5,  6,  7,  8, 10, 12, 14, 16, 20, 24, 28, 34, 40, 48, 60, 78, 100
+#if 1
+}
+struct BandInitialize {
+    BandInitialize() {
+        for (int i = 0; i < NB_BANDS; i++) {
+            ebands[i] = get_eband(i);
+        }
+    }
+    int get_eband(int i) {
+        /*
+         // test
+         for (int i = 0; i < NB_BANDS; i++) {
+         std::cout << i << " " << get_eband(i) << std::endl;
+         }
+         */
+        int prev_idx = -1;
+        int j = 0;
+        int k = 0;
+        while (1) {
+            const double erbs = 42.0 * j / NB_BANDS;
+            const double hz = (pow(10, erbs / 21.4) - 1) / 0.00437;
+            const int idx = floor(WINDOW_SIZE * hz / 48000);
+            if (prev_idx < idx) {
+                if (i == k) {
+                    return idx;
+                }
+                prev_idx = idx;
+                k++;
+            }
+            j++;
+        }
+    }
+    int ebands[NB_BANDS];
 };
 
+    // 0..NB_BANDS - 1
+    static int get_eband(int i) {
+        static BandInitialize band;
+        return band.ebands[i];
+    }
+extern "C" {
+#else
+    static int get_eband(int i) {
+        static const opus_int16 eband5ms[] = {
+            /*0  200 400 600 800  1k 1.2 1.4 1.6  2k 2.4 2.8 3.2  4k 4.8 5.6 6.8  8k 9.6 12k 15.6 20k*/
+            0,  1,  2,  3,  4,  5,  6,  7,  8, 10, 12, 14, 16, 20, 24, 28, 34, 40, 48, 60, 78, 100
+        };
+        return eband5ms[i] << FRAME_SIZE_SHIFT;
+    }
+#endif
+    
 
 typedef struct {
   int init;
@@ -102,7 +135,7 @@ struct DenoiseState {
   RNNState rnn;
   CommonState common;
     void *tensorflow_model;
-    float past_features[128 * 42];
+    float past_features[128 * NB_FEATURES];
 };
 
 #if SMOOTH_BANDS
@@ -113,12 +146,12 @@ void compute_band_energy(float *bandE, const kiss_fft_cpx *X) {
   {
     int j;
     int band_size;
-    band_size = (eband5ms[i+1]-eband5ms[i])<<FRAME_SIZE_SHIFT;
+    band_size = (get_eband(i + 1)-get_eband(i));
     for (j=0;j<band_size;j++) {
       float tmp;
       float frac = (float)j/band_size;
-      tmp = SQUARE(X[(eband5ms[i]<<FRAME_SIZE_SHIFT) + j].r);
-      tmp += SQUARE(X[(eband5ms[i]<<FRAME_SIZE_SHIFT) + j].i);
+      tmp = SQUARE(X[get_eband(i) + j].r);
+      tmp += SQUARE(X[get_eband(i) + j].i);
       sum[i] += (1-frac)*tmp;
       sum[i+1] += frac*tmp;
     }
@@ -138,12 +171,12 @@ void compute_band_corr(float *bandE, const kiss_fft_cpx *X, const kiss_fft_cpx *
   {
     int j;
     int band_size;
-    band_size = (eband5ms[i+1]-eband5ms[i])<<FRAME_SIZE_SHIFT;
+    band_size = (get_eband(i + 1)-get_eband(i));
     for (j=0;j<band_size;j++) {
       float tmp;
       float frac = (float)j/band_size;
-      tmp = X[(eband5ms[i]<<FRAME_SIZE_SHIFT) + j].r * P[(eband5ms[i]<<FRAME_SIZE_SHIFT) + j].r;
-      tmp += X[(eband5ms[i]<<FRAME_SIZE_SHIFT) + j].i * P[(eband5ms[i]<<FRAME_SIZE_SHIFT) + j].i;
+      tmp = X[get_eband(i) + j].r * P[get_eband(i) + j].r;
+      tmp += X[get_eband(i) + j].i * P[get_eband(i) + j].i;
       sum[i] += (1-frac)*tmp;
       sum[i+1] += frac*tmp;
     }
@@ -163,10 +196,10 @@ void interp_band_gain(float *g, const float *bandE) {
   {
     int j;
     int band_size;
-    band_size = (eband5ms[i+1]-eband5ms[i])<<FRAME_SIZE_SHIFT;
+    band_size = (get_eband(i+1)-get_eband(i));
     for (j=0;j<band_size;j++) {
       float frac = (float)j/band_size;
-      g[(eband5ms[i]<<FRAME_SIZE_SHIFT) + j] = (1-frac)*bandE[i] + frac*bandE[i+1];
+      g[get_eband(i) + j] = (1-frac)*bandE[i] + frac*bandE[i+1];
     }
   }
 }
@@ -278,7 +311,7 @@ static void compute_rnn_tensorflow(DenoiseState *st, float *gain_ptr, float *vad
     input.data = input_ptr;
     input.dims.push_back(0);
     input.dims.push_back(window_size);
-    input.dims.push_back(42);
+    input.dims.push_back(NB_FEATURES);
     input.name = "main_input";
     std::vector<rnnoise::TensorflowModel::Output> outputs;
     {
@@ -327,7 +360,7 @@ static void dct(CommonState *common, float *out, const float *in) {
     for (j=0;j<NB_BANDS;j++) {
       sum += in[j] * common->dct_table[j*NB_BANDS + i];
     }
-    out[i] = sum*sqrt(2./22);
+    out[i] = sum*sqrt(2./NB_BANDS);
   }
 }
 
@@ -341,7 +374,7 @@ static void idct(float *out, const float *in) {
     for (j=0;j<NB_BANDS;j++) {
       sum += in[j] * common.dct_table[i*NB_BANDS + j];
     }
-    out[i] = sum*sqrt(2./22);
+    out[i] = sum*sqrt(2./NB_BANDS);
   }
 }
 #endif
@@ -645,17 +678,17 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in, int p
   if (!silence) {
 #if 1
       for (int i = 0; i < 127; i++) {
-          for (int j = 0; j < 42; j++) {
-              st->past_features[42 * i + j] = st->past_features[42 * (i + 1) + j];
+          for (int j = 0; j < NB_FEATURES; j++) {
+              st->past_features[NB_FEATURES * i + j] = st->past_features[NB_FEATURES * (i + 1) + j];
           }
       }
-      for (int j = 0; j < 42; j++) {
-          st->past_features[42 * 127 + j] = features[j];
+      for (int j = 0; j < NB_FEATURES; j++) {
+          st->past_features[NB_FEATURES * 127 + j] = features[j];
       }
-      float transposed[128 * 42];
+      float transposed[128 * NB_FEATURES];
       for (int i = 0; i < 128; i++) {
-          for (int j = 0; j < 42; j++) {
-              transposed[128 * j + i] = st->past_features[42 * i + j];
+          for (int j = 0; j < NB_FEATURES; j++) {
+              transposed[128 * j + i] = st->past_features[NB_FEATURES * i + j];
           }
       }
       compute_rnn_tensorflow(st, g, &vad_prob, transposed);
@@ -763,18 +796,18 @@ int main(int argc, char **argv) {
         float vad_prob;
         float E=0;
         if (count==FLAGS_output_count) break;
-        if (++gain_change_count > 283) {
-            speech_gain = pow(10., (-60+(rand()%100))/20.);
+        if (++gain_change_count > 2821) {
+            speech_gain = pow(10., (-40+(rand()%60))/20.);
             noise_gain = pow(10., (-30+(rand()%50))/20.);
-            if (rand()%3==0) noise_gain = 0;
+            if (rand()%10==0) noise_gain = 0;
             noise_gain *= speech_gain;
-            if (rand()%3==0) speech_gain = 0;
+            if (rand()%10==0) speech_gain = 0;
             gain_change_count = 0;
             rand_resp(a_noise, b_noise);
             rand_resp(a_sig, b_sig);
             lowpass = FREQ_SIZE * 3000./24000. * pow(50., rand()/(double)RAND_MAX);
             for (i=0;i<NB_BANDS;i++) {
-                if (eband5ms[i]<<FRAME_SIZE_SHIFT > lowpass) {
+                if (get_eband(i) > lowpass) {
                     band_lp = i;
                     break;
                 }

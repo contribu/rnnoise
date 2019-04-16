@@ -43,6 +43,17 @@ static RNN_INLINE void rnnoise_free (void *ptr)
 #define RNN_CLEAR(dst, n) (memset((dst), 0, (n)*sizeof(*(dst))))
 #endif
 
+#define SMOOTH_BANDS 1
 
+#if SMOOTH_BANDS
+#define NB_BANDS 42
+#else
+#define NB_BANDS 21
+#endif
+
+#define CEPS_MEM 8
+#define NB_DELTA_CEPS 6
+
+#define NB_FEATURES (NB_BANDS+3*NB_DELTA_CEPS+2)
 
 #endif
