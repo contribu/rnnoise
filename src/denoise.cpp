@@ -832,9 +832,9 @@ int main(int argc, char **argv) {
         for (i=0;i<NB_BANDS;i++) {
             g[i] = sqrt((Ey[i]+1e-3)/(Ex[i]+1e-3));
             if (g[i] > 1) g[i] = 1;
-            // if (silence || i > band_lp) g[i] = -1;
-            // if (Ey[i] < 5e-2 && Ex[i] < 5e-2) g[i] = -1;
-            // if (vad==0 && noise_gain==0) g[i] = -1;
+            if (silence || i > band_lp) g[i] = -1;
+            if (Ey[i] < 5e-2 && Ex[i] < 5e-2) g[i] = -1;
+            if (vad==0 && noise_gain==0) g[i] = -1;
         }
         count++;
         if (count % 1000 == 0)
