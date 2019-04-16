@@ -6,7 +6,7 @@ extern "C" {
         int init;
         kiss_fft_state *kfft;
         float half_window[480];
-        float dct_table[22*22];
+        float dct_table[NB_BANDS*NB_BANDS];
 #ifdef RNNOISE_IPP
         void *ipp_dft_work;
 #endif
