@@ -78,6 +78,7 @@ parser.add_argument('--tcn_dilation_order', type=int, default=5)
 parser.add_argument('--bands', type=int, default=22)
 parser.add_argument('--gpus', type=int, default=0)
 parser.add_argument('--resume', default='')
+parser.add_argument('--weight_clip', type=float, default=0.499)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -176,7 +177,7 @@ class MyLazySequence(keras.utils.Sequence):
         return math.ceil(len(self.x_train) / self.batch_size)
 
 reg = args.reg
-constraint = WeightClip(0.499)
+constraint = WeightClip(args.weight_clip)
 
 def create_gru(units, name):
     if args.cudnngru:

@@ -224,8 +224,8 @@ class MyCLI < Thor
       # tensorboard
       pipenv run tensorboard --logdir ./tflogs
 
-      # tensorboard over ssh
-      ssh -L 6006:localhost:6006 user@host
+      # localhost:6007 -> tensorboard over ssha
+      ssh -L 6007:localhost:6006 user@host
     EOS
   end
 end
