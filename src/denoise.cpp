@@ -123,6 +123,7 @@ typedef struct {
 
 struct DenoiseState {
   float analysis_mem[FRAME_SIZE];
+    float analysis_mem2[FRAME_SIZE];
   float cepstral_mem[CEPS_MEM][NB_BANDS];
   int memid;
   float synthesis_mem[FRAME_SIZE];
@@ -294,7 +295,7 @@ extern "C" {
 #include <stdexcept>
 #include "tensorflow_model.h"
 static void *create_tensormodel() {
-    std::ifstream ifs("testmodel.pb", std::ios::binary | std::ios::ate);
+    std::ifstream ifs("testmodeltcn.pb", std::ios::binary | std::ios::ate);
     std::streamsize size = ifs.tellg();
     ifs.seekg(0, std::ios::beg);
     std::vector<char> buffer(size);
@@ -309,7 +310,7 @@ static void compute_rnn_tensorflow(DenoiseState *st, float *gain_ptr, float *vad
     const int window_size = 128;
     rnnoise::TensorflowModel::Input input;
     input.data = input_ptr;
-    input.dims.push_back(0);
+    input.dims.push_back(1);
     input.dims.push_back(window_size);
     input.dims.push_back(NB_FEATURES);
     input.name = "main_input";
@@ -328,6 +329,39 @@ static void compute_rnn_tensorflow(DenoiseState *st, float *gain_ptr, float *vad
     }
     const auto model = (rnnoise::TensorflowModel *)st->tensorflow_model;
     model->Predict(&input, 1, outputs.data(), 2);
+}
+
+static void compute_rnn_tensorflow2(DenoiseState *st, float *gain_ptr, float *vad_ptr, const float *input_ptr) {
+    const int window_size = 40;
+    rnnoise::TensorflowModel::Input input;
+    input.data = input_ptr;
+    input.dims.push_back(1);
+    input.dims.push_back(window_size);
+    input.dims.push_back(42);
+    input.name = "main_input";
+    std::vector<float> gain_buffer(window_size * 22);
+    std::vector<float> val_buffer(window_size * 1);
+    std::vector<rnnoise::TensorflowModel::Output> outputs;
+    {
+        rnnoise::TensorflowModel::Output output;
+        output.data = gain_buffer.data();
+        output.name = "denoise_output/Sigmoid";
+        outputs.push_back(output);
+    }
+    {
+        rnnoise::TensorflowModel::Output output;
+        output.data = val_buffer.data();
+        output.name = "vad_output/Sigmoid";
+        outputs.push_back(output);
+    }
+    const auto model = (rnnoise::TensorflowModel *)st->tensorflow_model;
+    model->Predict(&input, 1, outputs.data(), 2);
+    for (int i = 0; i < 22; i++) {
+        gain_ptr[i] = gain_buffer[22 * 39 + i];
+    }
+    for (int i = 0; i < 1; i++) {
+        vad_ptr[i] = val_buffer[1 * 39 + i];
+    }
 }
 
     extern "C" {
@@ -509,6 +543,21 @@ static void frame_analysis(DenoiseState *st, kiss_fft_cpx *X, float *Ex, const f
 #endif
   compute_band_energy(Ex, X);
 }
+    
+    static void frame_analysis2(DenoiseState *st, kiss_fft_cpx *X, float *Ex, const float *in) {
+        int i;
+        float x[WINDOW_SIZE];
+        RNN_COPY(x, st->analysis_mem2, FRAME_SIZE);
+        for (i=0;i<FRAME_SIZE;i++) x[FRAME_SIZE + i] = in[i];
+        RNN_COPY(st->analysis_mem2, in, FRAME_SIZE);
+        apply_window(&st->common, x);
+        forward_transform(&st->common, X, x);
+#if TRAINING
+        for (i=lowpass;i<FREQ_SIZE;i++)
+            X[i].r = X[i].i = 0;
+#endif
+        compute_band_energy(Ex, X);
+    }
 
 static int compute_frame_features(DenoiseState *st, kiss_fft_cpx *X, kiss_fft_cpx *P,
                                   float *Ex, float *Ep, float *Exp, float *features, const float *in) {
@@ -661,22 +710,42 @@ void pitch_filter(kiss_fft_cpx *X, const kiss_fft_cpx *P, const float *Ex, const
 float rnnoise_process_frame(DenoiseState *st, float *out, const float *in, int pitch_filter_enabled) {
   int i;
   kiss_fft_cpx X[FREQ_SIZE];
+  kiss_fft_cpx X2[FREQ_SIZE];
   kiss_fft_cpx P[WINDOW_SIZE];
   float x[FRAME_SIZE];
   float Ex[NB_BANDS], Ep[NB_BANDS];
   float Exp[NB_BANDS];
   float features[NB_FEATURES];
-  float g[NB_BANDS];
+  float g[NB_BANDS] = { 0 };
   float gf[FREQ_SIZE]={1};
   float vad_prob = 0;
   int silence;
   static const float a_hp[2] = {-1.99599, 0.99600};
   static const float b_hp[2] = {-2, 1};
   biquad(x, st->mem_hp_x, in, b_hp, a_hp, FRAME_SIZE);
+    
+    // calc clean X
+    frame_analysis2(st, X2, Ex, x);
+    
+    // add noise for stability
+    for (int i = 0; i < FRAME_SIZE; i++) {
+        x[i] += 100 * 1e-3 * ((rand() % 1000) - 0.5);
+    }
+    
   silence = compute_frame_features(st, X, P, Ex, Ep, Exp, features, x);
 
   if (!silence) {
-#if 1
+#if 0
+      for (int i = 0; i < 39; i++) {
+          for (int j = 0; j < NB_FEATURES; j++) {
+              st->past_features[NB_FEATURES * i + j] = st->past_features[NB_FEATURES * (i + 1) + j];
+          }
+      }
+      for (int j = 0; j < NB_FEATURES; j++) {
+          st->past_features[NB_FEATURES * 39 + j] = features[j];
+      }
+      compute_rnn_tensorflow2(st, g, &vad_prob, st->past_features);
+#elif 0
       for (int i = 0; i < 127; i++) {
           for (int j = 0; j < NB_FEATURES; j++) {
               st->past_features[NB_FEATURES * i + j] = st->past_features[NB_FEATURES * (i + 1) + j];
@@ -685,13 +754,7 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in, int p
       for (int j = 0; j < NB_FEATURES; j++) {
           st->past_features[NB_FEATURES * 127 + j] = features[j];
       }
-      float transposed[128 * NB_FEATURES];
-      for (int i = 0; i < 128; i++) {
-          for (int j = 0; j < NB_FEATURES; j++) {
-              transposed[128 * j + i] = st->past_features[NB_FEATURES * i + j];
-          }
-      }
-      compute_rnn_tensorflow(st, g, &vad_prob, transposed);
+      compute_rnn_tensorflow(st, g, &vad_prob, st->past_features);
 #else
     compute_rnn(&st->rnn, g, &vad_prob, features);
 #endif
@@ -706,13 +769,13 @@ float rnnoise_process_frame(DenoiseState *st, float *out, const float *in, int p
     interp_band_gain(gf, g);
 #if 1
     for (i=0;i<FREQ_SIZE;i++) {
-      X[i].r *= gf[i];
-      X[i].i *= gf[i];
+      X2[i].r *= gf[i];
+      X2[i].i *= gf[i];
     }
 #endif
   }
 
-  frame_synthesis(st, out, X);
+  frame_synthesis(st, out, X2);
   return vad_prob;
 }
 
