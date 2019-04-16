@@ -46,7 +46,7 @@ static RNN_INLINE void rnnoise_free (void *ptr)
 #define SMOOTH_BANDS 1
 
 #if SMOOTH_BANDS
-#define NB_BANDS 42
+#define NB_BANDS 22
 #else
 #define NB_BANDS 21
 #endif

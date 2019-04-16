@@ -59,7 +59,7 @@ extern "C" {
 #define TRAINING 0
 #endif
 
-#if 1
+#if 0
 }
 struct BandInitialize {
     BandInitialize() {
