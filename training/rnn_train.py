@@ -284,6 +284,37 @@ elif args.arch == 'original':
     denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru)
 
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
+elif args.arch == 'gru2':
+    # original + 1 gru
+    main_input = Input(shape=(None, feature_count), name='main_input')
+
+    tmp = Dense(math.ceil(24 * args.hidden_units), activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
+    if args.dropout > 0:
+        tmp = Dropout(args.dropout)(tmp)
+
+    vad_gru = create_gru(math.ceil(24 * args.hidden_units), 'vad_gru')(tmp)
+    if args.dropout > 0:
+        vad_gru = Dropout(args.dropout)(vad_gru)
+    vad_output = Dense(1, activation='sigmoid', name='vad_output', kernel_constraint=constraint, bias_constraint=constraint)(vad_gru)
+
+    noise_input = keras.layers.concatenate([tmp, vad_gru, main_input])
+    noise_gru = create_gru(math.ceil(48 * args.hidden_units), 'noise_gru')(noise_input)
+    if args.dropout > 0:
+        noise_gru = Dropout(args.dropout)(noise_gru)
+
+    denoise_input = keras.layers.concatenate([vad_gru, noise_gru, main_input])
+    denoise_gru = create_gru(math.ceil(96 * args.hidden_units), 'denoise_gru')(denoise_input)
+    if args.dropout > 0:
+        denoise_gru = Dropout(args.dropout)(denoise_gru)
+
+    denoise_gru2 = create_gru(math.ceil(96 * args.hidden_units), 'denoise_gru2')(denoise_gru)
+    if args.dropout > 0:
+        denoise_gru2 = Dropout(args.dropout)(denoise_gru2)
+    denoise_gru2 = keras.layers.Add()([denoise_gru2, denoise_gru])
+
+    denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output', kernel_constraint=constraint, bias_constraint=constraint)(denoise_gru2)
+
+    model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'cnn':
     main_input = Input(shape=(window_size, feature_count), name='main_input')
     input_dropout = Dropout(args.input_dropout)(main_input)
@@ -449,7 +480,7 @@ def window(ar, features):
     st = (ar.strides[0], ar.strides[0], ar.strides[1])
     return np.lib.stride_tricks.as_strided(ar, strides = st, shape = (nb_sequences*window_size - window_size + 1, window_size, features))
 
-if args.arch == 'original' or args.arch == 'original_tcn' or args.arch == 'tcn' or args.arch == 'cnn3':
+if args.arch == 'original' or args.arch == 'original_tcn' or args.arch == 'tcn' or args.arch == 'cnn3' or args.arch == 'gru2':
     x_train = np.reshape(x_train, (nb_sequences, window_size, feature_count))
     y_train = np.reshape(y_train, (nb_sequences, window_size, args.bands))
     noise_train = np.reshape(noise_train, (nb_sequences, window_size, args.bands))
