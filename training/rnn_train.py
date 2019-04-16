@@ -32,6 +32,7 @@ from keras import losses
 from keras import regularizers
 from keras.constraints import min_max_norm
 import h5py
+from keras.utils import multi_gpu_model
 
 from keras.constraints import Constraint
 from keras import backend as K
@@ -74,6 +75,7 @@ parser.add_argument('--noise_stddev', type=float, default=10.0)
 parser.add_argument('--tcn_layers', type=int, default=3)
 parser.add_argument('--tcn_dilation_order', type=int, default=5)
 parser.add_argument('--bands', type=int, default=22)
+parser.add_argument('--gpus', type=int, default=0)
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -363,7 +365,13 @@ else:
 
 optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
 
-model.compile(loss=[mycost, my_crossentropy],
+
+if args.gpus > 0:
+    compiled_model = multi_gpu_model(model, gpus=args.gpus)
+else:
+    compiled_model = model
+
+compiled_model.compile(loss=[mycost, my_crossentropy],
               metrics=[msse],
               optimizer=optimizer, loss_weights=[10, 0.5])
 
@@ -442,7 +450,7 @@ modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, '
                                                   period=1)
 
 if args.mixup == 0:
-    model.fit(x_train, [y_train, vad_train],
+    compiled_model.fit(x_train, [y_train, vad_train],
               batch_size=batch_size,
               epochs=120,
               validation_split=0.1,
@@ -454,7 +462,7 @@ else:
     train_gen = MyMixupGenerator(x_train_train, y_train_train, vad_train_train, batch_size, args.mixup_alpha)
     # train_gen = mixup_generator.MixupGenerator(x_train_train, np.array([y_train_train, vad_val]), batch_size=batch_size, alpha=0.2)()
     val_gen = MySequence(x_val, y_val, vad_val, batch_size)
-    model.fit_generator(
+    compiled_model.fit_generator(
         generator=train_gen(),
         epochs=120,
         steps_per_epoch=args.mixup * len(train_gen),
