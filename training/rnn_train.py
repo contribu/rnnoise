@@ -177,7 +177,10 @@ class MyLazySequence(keras.utils.Sequence):
         return math.ceil(len(self.x_train) / self.batch_size)
 
 reg = args.reg
-constraint = WeightClip(args.weight_clip)
+if args.weight_clip > 0:
+    constraint = WeightClip(args.weight_clip)
+else:
+    constraint = None
 
 def create_gru(units, name):
     if args.cudnngru:
