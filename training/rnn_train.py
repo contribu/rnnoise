@@ -195,21 +195,21 @@ window_size = args.window_size
 feature_count = args.bands + 20
 
 # https://deepage.net/deep_learning/2016/11/30/resnet.html
-def double_cnn_block(unit, conv_shape, input):
+def double_cnn_block(unit, conv_shape, input, dilation_rate=(1, 1)):
     # wide res net
     x = input
     x = keras.layers.normalization.BatchNormalization()(x)
     x = keras.layers.Activation('elu')(x)
-    x = Conv2D(unit, conv_shape, padding='same', use_bias=False)(x)
+    x = Conv2D(unit, conv_shape, padding='same', use_bias=False, dilation_rate=dilation_rate)(x)
     x = keras.layers.normalization.BatchNormalization()(x)
     x = keras.layers.Activation('elu')(x)
     if args.dropout > 0:
         x = Dropout(args.dropout)(x)
-    x = Conv2D(unit, conv_shape, padding='same', use_bias=False)(x)
+    x = Conv2D(unit, conv_shape, padding='same', use_bias=False, dilation_rate=dilation_rate)(x)
     return x
 
-def res_block(unit, conv_shape, input):
-    x = double_cnn_block(unit, conv_shape, input)
+def res_block(unit, conv_shape, input, dilation_rate=(1, 1)):
+    x = double_cnn_block(unit, conv_shape, input, dilation_rate=dilation_rate)
     x = keras.layers.Add()([x, input])
     return x
 
@@ -327,6 +327,28 @@ elif args.arch == 'cnn2':
     vad_output = Dense(1, activation='sigmoid', name='vad_output')(flatten)
     denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output')(flatten)
     model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
+elif args.arch == 'cnn3':
+    # スペクトログラムからゲインを二次元画像的に予測(因果的ではない)
+    main_input = Input(shape=(window_size, feature_count), name='main_input')
+    input_dropout = Dropout(args.input_dropout)(main_input)
+    reshaped = Reshape((window_size, feature_count, 1))(input_dropout)
+
+    x = reshaped
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(1, 1))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(2, 2))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(4, 4))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(8, 8))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(16, 16))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(1, 1))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(2, 2))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(4, 4))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(8, 8))
+    x = res_block(int(16 * args.hidden_units), (3, 3), x, dilation_rate=(16, 16))
+
+    x = Reshape((window_size, feature_count * int(16 * args.hidden_units)))(x);
+    vad_output = Dense(1, activation='sigmoid', name='vad_output')(x)
+    denoise_output = Dense(args.bands, activation='sigmoid', name='denoise_output')(x)
+    model = Model(inputs=main_input, outputs=[denoise_output, vad_output])
 elif args.arch == 'original_tcn':
     # originalをtcnに置き換えたもの
     main_input = Input(shape=(None, feature_count), name='main_input')
@@ -419,7 +441,7 @@ def window(ar, features):
     st = (ar.strides[0], ar.strides[0], ar.strides[1])
     return np.lib.stride_tricks.as_strided(ar, strides = st, shape = (nb_sequences*window_size - window_size + 1, window_size, features))
 
-if args.arch == 'original' or args.arch == 'original_tcn' or args.arch == 'tcn':
+if args.arch == 'original' or args.arch == 'original_tcn' or args.arch == 'tcn' or args.arch == 'cnn3':
     x_train = np.reshape(x_train, (nb_sequences, window_size, feature_count))
     y_train = np.reshape(y_train, (nb_sequences, window_size, args.bands))
     noise_train = np.reshape(noise_train, (nb_sequences, window_size, args.bands))
@@ -467,7 +489,7 @@ if args.mixup == 0:
               batch_size=batch_size,
               epochs=120,
               validation_split=0.1,
-              callbacks=[modelCheckpoint])
+              callbacks=[modelCheckpoint, keras.callbacks.ReduceLROnPlateau()])
 else:
     x_train_train, x_val, y_train_train, y_val, vad_train_train, vad_val = train_test_split(x_train, y_train, vad_train, test_size=0.1, shuffle=True, random_state=1)
 
