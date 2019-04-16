@@ -39,6 +39,7 @@ from keras import backend as K
 import numpy as np
 
 from tcn import TCN
+# import autokeras as ak
 
 # import mixup_generator from .py
 # mixup_generator = importlib.machinery.SourceFileLoader('mixup_generator', os.path.join(os.path.dirname(__file__), '../deps/mixup-generator/mixup_generator.py')).load_module()
@@ -76,6 +77,7 @@ parser.add_argument('--tcn_layers', type=int, default=3)
 parser.add_argument('--tcn_dilation_order', type=int, default=5)
 parser.add_argument('--bands', type=int, default=22)
 parser.add_argument('--gpus', type=int, default=0)
+parser.add_argument('--resume', default='')
 args = parser.parse_args()
 
 def my_safecrossentropy(y_pred, y_true):
@@ -239,7 +241,18 @@ def tcn_res_blocks(unit, kernel_size, dilation_rates, input):
         x = tcn_res_block(unit, kernel_size, dilation_rate, x)
     return x
 
-if args.arch == 'original':
+if args.resume != '':
+    custom_objects = {
+        'my_safecrossentropy': my_safecrossentropy,
+        'my_crossentropy': my_crossentropy,
+        'mymask': mymask,
+        'msse': msse,
+        'mycost': mycost,
+        'my_accuracy': my_accuracy,
+        'WeightClip': WeightClip
+    }
+    model = keras.models.load_model(args.resume, custom_objects=custom_objects)
+elif args.arch == 'original':
     main_input = Input(shape=(None, feature_count), name='main_input')
 
     tmp = Dense(math.ceil(24 * args.hidden_units), activation='tanh', name='input_dense', kernel_constraint=constraint, bias_constraint=constraint)(main_input)
