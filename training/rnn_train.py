@@ -401,15 +401,19 @@ else:
 
 optimizer = keras.optimizers.Adam(lr=args.learning_rate, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
 
-
 if args.gpus > 0:
-    compiled_model = multi_gpu_model(model, gpus=args.gpus)
+    train_model = multi_gpu_model(model, gpus=args.gpus)
+    # https://github.com/kuza55/keras-extras/issues/3#issuecomment-264408864
+    funcType = type(model.save)
+    def new_save(self_,filepath, overwrite=True):
+        model.save(filepath, overwrite)
+    train_model.save=funcType(new_save, train_model)
 else:
-    compiled_model = model
+    train_model = model
 
-compiled_model.compile(loss=[mycost, my_crossentropy],
-              metrics=[msse],
-              optimizer=optimizer, loss_weights=[10, 0.5])
+train_model.compile(loss=[mycost, my_crossentropy],
+                    metrics=[msse],
+                    optimizer=optimizer, loss_weights=[10, 0.5])
 
 print('count_params {}'.format(model.count_params()))
 print(model.summary())
@@ -489,7 +493,7 @@ modelCheckpoint = keras.callbacks.ModelCheckpoint(filepath = os.path.join(dir, '
 tensor_board = keras.callbacks.TensorBoard(log_dir='./tflogs/train{}'.format(train_id), histogram_freq=1, batch_size=batch_size, write_graph=True, write_grads=False, write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None)
 
 if args.mixup == 0:
-    compiled_model.fit(x_train, [y_train, vad_train],
+    train_model.fit(x_train, [y_train, vad_train],
               batch_size=batch_size,
               epochs=120,
               validation_split=0.1,
@@ -501,7 +505,7 @@ else:
     train_gen = MyMixupGenerator(x_train_train, y_train_train, vad_train_train, batch_size, args.mixup_alpha)
     # train_gen = mixup_generator.MixupGenerator(x_train_train, np.array([y_train_train, vad_val]), batch_size=batch_size, alpha=0.2)()
     val_gen = MySequence(x_val, y_val, vad_val, batch_size)
-    compiled_model.fit_generator(
+    train_model.fit_generator(
         generator=train_gen(),
         epochs=120,
         steps_per_epoch=args.mixup * len(train_gen),
