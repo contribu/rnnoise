@@ -75,6 +75,7 @@ parser.add_argument('--noise_prob', type=float, default=0.0)
 parser.add_argument('--noise_stddev', type=float, default=10.0)
 parser.add_argument('--tcn_layers', type=int, default=3)
 parser.add_argument('--tcn_dilation_order', type=int, default=5)
+parser.add_argument('--tcn_noncausal', action='store_true')
 parser.add_argument('--bands', type=int, default=22)
 parser.add_argument('--gpus', type=int, default=0)
 parser.add_argument('--resume', default='')
@@ -225,15 +226,19 @@ def res_block2(unit, conv_shape1, conv_shape2, input):
     return x
 
 def tcn_res_block(unit, kernel_size, dilation_rate, input):
+    if args.tcn_noncausal:
+        padding = 'same'
+    else:
+        padding = 'causal'
     x = input
     x = keras.layers.normalization.BatchNormalization()(x)
     x = keras.layers.Activation('elu')(x)
-    x = keras.layers.Conv1D(unit, kernel_size, dilation_rate=dilation_rate, padding='causal', use_bias=False)(x)
+    x = keras.layers.Conv1D(unit, kernel_size, dilation_rate=dilation_rate, padding=padding, use_bias=False)(x)
     x = keras.layers.normalization.BatchNormalization()(x)
     x = keras.layers.Activation('elu')(x)
     if args.dropout > 0:
         x = Dropout(args.dropout)(x)
-    x = keras.layers.Conv1D(unit, kernel_size, dilation_rate=dilation_rate, padding='causal', use_bias=False)(x)
+    x = keras.layers.Conv1D(unit, kernel_size, dilation_rate=dilation_rate, padding=padding, use_bias=False)(x)
     if input.shape[-1] != unit:
         input = Dense(unit)(input)
     x = keras.layers.Add()([x, input])
